@@ -1,10 +1,23 @@
 import { successResponse } from '../../utils/responseHandler.js';
 
-import { createCourse, getCourses, getCourseById, getCourseWithDetails, updateCourse, deleteCourse, getAllCoursesUnfiltered } from './course.service.js';
+import {
+	createCourse,
+	getCourses,
+	getCoursesByInstructor,
+	getCourseById,
+	getCourseWithDetails,
+	updateCourse,
+	deleteCourse,
+	getAllCoursesUnfiltered,
+} from './course.service.js';
 
 export const createCourseController = async (req, res, next) => {
 	try {
-		const course = await createCourse({ ...req.body, instructorId: req.user._id });
+		const courseData = { ...req.body, instructorId: req.user._id };
+		if (req.file) {
+			courseData.thumbnail = `/uploads/thumbnails/${req.file.filename}`;
+		}
+		const course = await createCourse(courseData);
 		return successResponse(res, {
 			statusCode: 201,
 			message: 'Course created successfully',
@@ -21,6 +34,18 @@ export const getAllCoursesController = async (req, res, next) => {
 		const courses = await getCourses({ category, difficulty, search, instructorId });
 		return successResponse(res, {
 			message: 'Courses fetched successfully',
+			data: courses,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const getInstructorCoursesController = async (req, res, next) => {
+	try {
+		const courses = await getCoursesByInstructor(req.user._id);
+		return successResponse(res, {
+			message: 'Instructor courses fetched successfully',
 			data: courses,
 		});
 	} catch (error) {

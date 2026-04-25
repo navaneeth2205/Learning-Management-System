@@ -44,6 +44,7 @@ import GradingWorkspace from './pages/instructor/GradingWorkspace';
 import InstructorQuizzes from './pages/instructor/InstructorQuizzes';
 import QuizBuilder from './pages/instructor/QuizBuilder';
 import QuizAnalytics from './pages/instructor/QuizAnalytics';
+import AccessRequests from './pages/instructor/AccessRequests';
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagement from './pages/admin/UserManagement';
@@ -120,6 +121,7 @@ export default function AppRouter() {
                 <Route path="quiz/create" element={<QuizBuilder />} />
                 <Route path="quiz/:id/edit" element={<QuizBuilder />} />
                 <Route path="quiz/:id/analytics" element={<QuizAnalytics />} />
+                <Route path="access-requests" element={<AccessRequests />} />
                 <Route path="announcements" element={<AnnouncementsPage />} />
                 <Route path="messages" element={<MessageInbox />} />
                 <Route path="profile" element={<ProfilePage />} />

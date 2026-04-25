@@ -42,6 +42,11 @@ export const getCourses = async (query = {}) => {
 		.sort({ createdAt: -1 });
 };
 
+export const getCoursesByInstructor = async (instructorId) =>
+	Course.find({ instructorId })
+		.populate('instructorId', 'name email role')
+		.sort({ createdAt: -1 });
+
 export const getAllCoursesUnfiltered = async () =>
 	Course.find()
 		.populate('instructorId', 'name email role')

@@ -36,6 +36,7 @@ export const ROUTES = {
     INSTRUCTOR_ANNOUNCEMENTS: '/instructor/announcements',
     INSTRUCTOR_PROFILE: '/instructor/profile',
     INSTRUCTOR_MESSAGES: '/instructor/messages',
+    INSTRUCTOR_ACCESS_REQUESTS: '/instructor/access-requests',
     INSTRUCTOR_QUIZZES: '/instructor/quizzes',
     INSTRUCTOR_QUIZ_CREATE: '/instructor/quiz/create',
     INSTRUCTOR_QUIZ_EDIT: '/instructor/quiz/:id/edit',

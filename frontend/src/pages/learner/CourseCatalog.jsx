@@ -4,7 +4,6 @@ import {
     HiFilter, HiStar, HiClock, HiAcademicCap,
     HiChevronRight, HiChevronDown, HiTag, HiBookmark, HiUsers
 } from 'react-icons/hi';
-import { mockCourses } from '../../data/mockData';
 import { DIFFICULTY } from '../../constants/status';
 import { ROUTES } from '../../constants/routes';
 import { Link } from 'react-router-dom';
@@ -55,26 +54,23 @@ export default function CourseCatalog() {
         load();
     }, [category, difficulty, search]);
 
-    // Merge live and mock courses
+    // Map live courses to display format
     const allCourses = useMemo(() => {
-        if (liveCourses.length > 0) {
-            return liveCourses.map(c => ({
-                id: c._id,
-                title: c.title,
-                description: c.description,
-                instructorName: c.instructorId?.name || 'Instructor',
-                category: c.category || 'General',
-                difficulty: c.difficulty || 'Beginner',
-                duration: c.duration || '',
-                thumbnail: c.thumbnail,
-                enrolled: c.enrolledCount || 0,
-                rating: c.rating || 0,
-                tags: c.tags || [],
-                status: c.status,
-                _id: c._id,
-            }));
-        }
-        return mockCourses;
+        return liveCourses.map(c => ({
+            id: c._id,
+            title: c.title,
+            description: c.description,
+            instructorName: c.instructorId?.name || 'Instructor',
+            category: c.category || 'General',
+            difficulty: c.difficulty || 'Beginner',
+            duration: c.duration || '',
+            thumbnail: c.thumbnail,
+            enrolled: c.enrolledCount || 0,
+            rating: c.rating || 0,
+            tags: c.tags || [],
+            status: c.status,
+            _id: c._id,
+        }));
     }, [liveCourses]);
 
     const categories = ['All', 'Web Development', 'Data Science', 'Design', 'Cloud', 'Business', 'General'];
@@ -85,17 +81,10 @@ export default function CourseCatalog() {
         { label: 'Advanced', value: DIFFICULTY.ADVANCED },
     ];
 
-    // Client-side filter for mock data only
+    // Client-side filter (search already sent to API, but this handles local filtering too)
     const filteredCourses = useMemo(() => {
-        if (liveCourses.length > 0) return allCourses;
-        return allCourses.filter(course => {
-            const matchesSearch = course.title.toLowerCase().includes(search.toLowerCase()) ||
-                course.description.toLowerCase().includes(search.toLowerCase());
-            const matchesCategory = category === 'All' || course.category === category;
-            const matchesDifficulty = difficulty === 'All' || course.difficulty === difficulty;
-            return matchesSearch && matchesCategory && matchesDifficulty;
-        });
-    }, [allCourses, search, category, difficulty, liveCourses]);
+        return allCourses;
+    }, [allCourses]);
 
     const itemsPerPage = 8;
     const totalPages = Math.ceil(filteredCourses.length / itemsPerPage);

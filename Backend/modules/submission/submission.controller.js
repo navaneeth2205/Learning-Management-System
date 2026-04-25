@@ -1,5 +1,6 @@
 import { successResponse } from '../../utils/responseHandler.js';
 import { createAppError } from '../../utils/constants.js';
+import Submission from './submission.model.js';
 
 import { assignGrade, createSubmission, getSubmissionsByAssignment, getSubmissionsByUser } from './submission.service.js';
 
@@ -63,4 +64,18 @@ export const mySubmissionsController = async (req, res, next) => {
 	} catch (error) {
 		return next(error);
 	}
+};
+export const getPendingSubmissions = async (req, res) => {
+  try {
+    const submissions = await Submission.find({ grade: null })
+      .populate('userId', 'name email')
+      .populate('assignmentId', 'title');
+
+	return successResponse(res, {
+		message: 'Pending submissions fetched successfully',
+		data: submissions,
+	});
+  } catch (error) {
+	return res.status(500).json({ message: error.message });
+  }
 };

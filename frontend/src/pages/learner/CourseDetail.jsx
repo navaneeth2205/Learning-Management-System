@@ -5,14 +5,13 @@ import {
     HiCheckCircle, HiLockClosed, HiPlay, HiDocumentText,
     HiUserGroup, HiOutlineBadgeCheck, HiVideoCamera, HiPhone
 } from 'react-icons/hi';
-import { mockCourses } from '../../data/mockData';
 import { ROUTES } from '../../constants/routes';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Tabs from '../../components/ui/Tabs';
 import Avatar from '../../components/ui/Avatar';
 import ProgressBar from '../../components/ui/ProgressBar';
-import { fetchCourseDetails, enrollInCourse, checkEnrollment } from '../../services/learnerApi';
+import { fetchCourseDetails, enrollInCourse, checkEnrollment, sendMessageAPI, fetchMessageAccessStatus, requestMessageAccess } from '../../services/learnerApi';
 import CallModal from '../../components/communication/CallModal';
 import { useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
@@ -26,16 +25,24 @@ export default function CourseDetail() {
     const [enrolled, setEnrolled] = useState(false);
     const [enrolling, setEnrolling] = useState(false);
     const [callConfig, setCallConfig] = useState({ isOpen: false, channel: '', isVideo: true });
+    const [messageText, setMessageText] = useState('');
+    const [accessStatus, setAccessStatus] = useState('none');
+    const [requestingAccess, setRequestingAccess] = useState(false);
+
+    const getInstructorId = (value) => {
+        if (!value) return null;
+        if (typeof value === 'string') return value;
+        return value._id || value.id || null;
+    };
 
     useEffect(() => {
         const load = async () => {
             try {
                 const data = await fetchCourseDetails(courseId);
                 setCourse(data);
-            } catch {
-                // Fallback to mock
-                const mock = mockCourses.find(c => c.id === parseInt(courseId)) || mockCourses[0];
-                setCourse(mock);
+            } catch (err) {
+                console.error('Failed to load course details:', err);
+                toast.error('Failed to load course details');
             } finally {
                 setLoading(false);
             }
@@ -49,6 +56,15 @@ export default function CourseDetail() {
             .then(data => setEnrolled(data?.enrolled || false))
             .catch(() => {});
     }, [courseId, token]);
+
+    useEffect(() => {
+        const instructorId = getInstructorId(course?.instructorId);
+        if (!token || !instructorId) return;
+
+        fetchMessageAccessStatus(instructorId)
+            .then((data) => setAccessStatus(data?.status || 'none'))
+            .catch(() => setAccessStatus('none'));
+    }, [course?.instructorId, token]);
 
     const handleEnroll = async () => {
         if (!token) {
@@ -67,6 +83,63 @@ export default function CourseDetail() {
         }
     };
 
+    const handleMessageInstructor = async () => {
+        const instructorId = getInstructorId(course?.instructorId);
+
+        if (!token) {
+            toast.error('Please login to message the instructor');
+            return;
+        }
+
+        if (accessStatus !== 'approved') {
+            toast.error('Request access first');
+            return;
+        }
+
+        if (!instructorId) {
+            toast.error('Instructor details are unavailable for this course');
+            return;
+        }
+
+        try {
+            const content = messageText.trim() || `Hi, I have a question about ${course?.title}.`;
+            await sendMessageAPI({
+                receiverId: instructorId,
+                subject: `Question about ${course?.title}`,
+                content,
+            });
+            setMessageText('');
+            toast.success('Message sent to instructor');
+        } catch (err) {
+            toast.error(err.message || 'Failed to send message');
+        }
+    };
+
+    const handleRequestAccess = async () => {
+        const instructorId = getInstructorId(course?.instructorId);
+
+        if (!token) {
+            toast.error('Please login to request access');
+            return;
+        }
+
+        if (!instructorId) {
+            toast.error('Instructor details are unavailable for this course');
+            return;
+        }
+
+        setRequestingAccess(true);
+        try {
+            await requestMessageAccess(instructorId, `Please approve my message and call access for ${course?.title}.`);
+            setAccessStatus('pending');
+            toast.success('Access request sent to the instructor');
+        } catch (err) {
+            toast.error(err.message || 'Failed to request access');
+        } finally {
+            setRequestingAccess(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
@@ -75,10 +148,20 @@ export default function CourseDetail() {
         );
     }
 
-    const c = course || mockCourses[0];
-    const instructorName = c.instructorId?.name || c.instructorName || 'Instructor';
-    const lessons = c.lessons || c.curriculum?.flatMap(m => m.lessons) || [];
-    const lessonCount = Array.isArray(lessons) ? lessons.length : (typeof lessons === 'number' ? lessons : 0);
+    if (!course) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+                <HiAcademicCap className="w-16 h-16 text-slate-300" />
+                <h2 className="text-xl font-bold text-text-primary">Course Not Found</h2>
+                <p className="text-text-secondary">This course could not be loaded from the database.</p>
+            </div>
+        );
+    }
+
+    const c = course;
+    const instructorName = c.instructorId?.name || 'Instructor';
+    const lessons = c.lessons || [];
+    const lessonCount = Array.isArray(lessons) ? lessons.length : 0;
 
     const tabs = [
         { key: 'curriculum', label: 'Curriculum', icon: <HiAcademicCap /> },
@@ -152,6 +235,21 @@ export default function CourseDetail() {
                                                 {enrolling ? 'Enrolling...' : 'Enroll Now — Free'}
                                             </Button>
                                         )}
+                                        {getInstructorId(c.instructorId) && accessStatus !== 'approved' && (
+                                            <Button
+                                                fullWidth
+                                                variant="outline"
+                                                className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                                                onClick={handleRequestAccess}
+                                                disabled={requestingAccess}
+                                            >
+                                                {requestingAccess
+                                                    ? 'Requesting...'
+                                                    : accessStatus === 'pending'
+                                                        ? 'Access Request Pending'
+                                                        : 'Request Message Access'}
+                                            </Button>
+                                        )}
                                     </div>
                                     <div className="space-y-4 pt-4 border-t border-surface-border">
                                         <p className="text-sm font-bold text-text-primary">This course includes:</p>
@@ -216,7 +314,7 @@ export default function CourseDetail() {
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-4 text-xs text-text-muted">
-                                                            <span className="capitalize">{lesson.type || 'video'}</span>
+                                                            <Badge color={lesson.type === 'pdf' ? 'rose' : 'blue'} className="text-[9px]">{(lesson.type || 'video').toUpperCase()}</Badge>
                                                             {!enrolled && <HiLockClosed className="opacity-40" />}
                                                         </div>
                                                     </Link>
@@ -224,42 +322,11 @@ export default function CourseDetail() {
                                             </div>
                                         </div>
                                     ) : (
-                                        /* Fallback to mock curriculum */
-                                        (c.curriculum || []).map((module, i) => (
-                                            <div key={i} className="bg-white border border-surface-border rounded-xl overflow-hidden shadow-sm">
-                                                <div className="bg-surface-muted px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-slate-200 transition-colors">
-                                                    <div className="flex items-center gap-3">
-                                                        <h3 className="font-bold text-text-primary">{module.title}</h3>
-                                                    </div>
-                                                    <div className="flex items-center gap-4 text-sm text-text-muted">
-                                                        <span>{module.lessons?.length || 0} lessons</span>
-                                                        <HiChevronRight />
-                                                    </div>
-                                                </div>
-                                                <div className="divide-y divide-surface-border">
-                                                    {(module.lessons || []).map((lesson, j) => (
-                                                        <div key={j} className="px-6 py-4 flex items-center justify-between group hover:bg-primary-50/30 transition-colors">
-                                                            <div className="flex items-center gap-3 min-w-0">
-                                                                <div className="w-8 h-8 rounded-lg bg-surface-muted flex items-center justify-center text-text-muted group-hover:bg-primary-100 group-hover:text-primary-600 transition-colors">
-                                                                    <HiPlay className="w-4 h-4" />
-                                                                </div>
-                                                                <p className="text-sm font-medium text-text-secondary truncate">{lesson.title}</p>
-                                                            </div>
-                                                            <div className="flex items-center gap-4 text-xs text-text-muted">
-                                                                {lesson.completed ? (
-                                                                    <HiCheckCircle className="text-emerald-500 w-5 h-5" />
-                                                                ) : (
-                                                                    <>
-                                                                        <span className="hidden sm:inline">{lesson.duration}</span>
-                                                                        <HiLockClosed className="opacity-40" />
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ))
+                                        <div className="bg-white border border-surface-border rounded-xl p-8 text-center">
+                                            <HiAcademicCap className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                                            <p className="text-sm font-bold text-text-primary">No lessons yet</p>
+                                            <p className="text-xs text-text-muted mt-1">The instructor hasn't added any lessons to this course yet.</p>
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -297,7 +364,7 @@ export default function CourseDetail() {
                                     <p className="text-text-secondary leading-relaxed">
                                         Experienced educator passionate about teaching and helping students achieve their learning goals.
                                     </p>
-                                    {enrolled && (
+                                    {accessStatus === 'approved' && (
                                         <div className="pt-4 flex gap-3">
                                             <Button 
                                                 variant="primary" 
@@ -322,6 +389,40 @@ export default function CourseDetail() {
                                                 })}
                                             >
                                                 Audio Call
+                                            </Button>
+                                        </div>
+                                    )}
+                                    {getInstructorId(c.instructorId) && accessStatus !== 'approved' && (
+                                        <div className="pt-4 space-y-3">
+                                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                                                {accessStatus === 'pending'
+                                                    ? 'Your request is pending instructor approval.'
+                                                    : 'Request access to message or call this instructor.'}
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                className="bg-amber-600 hover:bg-amber-700 text-white"
+                                                onClick={handleRequestAccess}
+                                                disabled={requestingAccess}
+                                            >
+                                                {requestingAccess ? 'Requesting...' : 'Request Message Access'}
+                                            </Button>
+                                        </div>
+                                    )}
+                                    {getInstructorId(c.instructorId) && accessStatus === 'approved' && (
+                                        <div className="pt-4 space-y-3">
+                                            <textarea
+                                                value={messageText}
+                                                onChange={(e) => setMessageText(e.target.value)}
+                                                placeholder="Write a message to the instructor..."
+                                                className="w-full min-h-28 rounded-xl border border-surface-border px-4 py-3 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                                            />
+                                            <Button
+                                                size="sm"
+                                                className="bg-primary-600 hover:bg-primary-700 text-white"
+                                                onClick={handleMessageInstructor}
+                                            >
+                                                Message Instructor
                                             </Button>
                                         </div>
                                     )}

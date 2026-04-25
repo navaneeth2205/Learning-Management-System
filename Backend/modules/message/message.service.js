@@ -1,12 +1,32 @@
 import Message from './message.model.js';
 import User from '../user/user.model.js';
+import { hasApprovedAccess } from '../message-access/messageAccess.service.js';
 
 import { createAppError } from '../../utils/constants.js';
 
 export const sendMessage = async ({ senderId, receiverId, subject, content }) => {
-	const receiver = await User.findById(receiverId);
+	const sender = await User.findById(senderId).select('role');
+	const receiver = await User.findById(receiverId).select('role');
+
 	if (!receiver) {
 		throw createAppError('Recipient not found', 404);
+	}
+	if (!sender) {
+		throw createAppError('Sender not found', 404);
+	}
+
+	const involvesInstructorLearner =
+		(sender.role === 'learner' && receiver.role === 'instructor') ||
+		(sender.role === 'instructor' && receiver.role === 'learner');
+
+	if (involvesInstructorLearner) {
+		const learnerId = sender.role === 'learner' ? senderId : receiverId;
+		const instructorId = sender.role === 'instructor' ? senderId : receiverId;
+		const approved = await hasApprovedAccess({ learnerId, instructorId });
+
+		if (!approved) {
+			throw createAppError('Message access has not been approved by the instructor', 403);
+		}
 	}
 
 	return Message.create({ senderId, receiverId, subject, content });

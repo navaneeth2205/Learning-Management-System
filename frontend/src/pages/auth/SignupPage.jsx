@@ -13,6 +13,8 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import clsx from 'clsx';
 
+const AUTH_STORAGE_KEY = 'lms_auth';
+
 export default function SignupPage() {
     const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '', role: ROLES.LEARNER });
     const [showPass, setShowPass] = useState(false);
@@ -89,6 +91,11 @@ export default function SignupPage() {
                 idToken,
                 role: form.role,
             });
+
+            try {
+                localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user: data?.user, token: data?.token }));
+            } catch {
+            }
 
             setAuthToken(data.token);
             dispatch(loginSuccess(data));

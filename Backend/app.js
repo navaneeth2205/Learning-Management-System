@@ -17,7 +17,10 @@ const configuredOrigins = env.clientUrl === '*'
 			.filter(Boolean);
 const allowedOrigins = new Set([...defaultDevOrigins, ...configuredOrigins]);
 
-app.use(helmet());
+app.use(helmet({
+	crossOriginResourcePolicy: { policy: 'cross-origin' },
+	crossOriginEmbedderPolicy: false,
+}));
 app.use(
 	cors({
 		origin(origin, callback) {
@@ -44,7 +47,18 @@ app.get('/', (req, res) => {
 	});
 });
 
-app.use('/uploads', express.static('uploads'));
+// Serve uploaded files (videos, PDFs, thumbnails) with proper headers
+app.use('/uploads', express.static('uploads', {
+	setHeaders: (res, filePath) => {
+		// Allow cross-origin access for all uploaded files
+		res.set('Access-Control-Allow-Origin', '*');
+		res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+		// Enable range requests for video seeking
+		if (filePath.endsWith('.mp4') || filePath.endsWith('.webm') || filePath.endsWith('.ogg')) {
+			res.set('Accept-Ranges', 'bytes');
+		}
+	}
+}));
 app.use('/api', apiRoutes);
 
 app.use(notFoundHandler);

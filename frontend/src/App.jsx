@@ -1,25 +1,57 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { Provider, useSelector } from 'react-redux';
+import { Provider, useDispatch, useSelector } from 'react-redux';
 import { Toaster } from 'react-hot-toast';
 import store from './store/store';
 import AppRouter from './AppRouter';
 import { setAuthToken } from './services/api';
+import { loginSuccess } from './features/auth/authSlice';
 
-function AuthTokenSync() {
-  const { token } = useSelector(s => s.auth);
+const AUTH_STORAGE_KEY = 'lms_auth';
+
+function AuthBootstrap({ children }) {
+  const dispatch = useDispatch();
+  const { token, isAuthenticated } = useSelector(s => s.auth);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+      if (raw && !isAuthenticated) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.user && parsed?.token) {
+          dispatch(loginSuccess(parsed));
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    } finally {
+      setReady(true);
+    }
+  }, [dispatch, isAuthenticated]);
+
   useEffect(() => {
     setAuthToken(token);
   }, [token]);
-  return null;
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">
+        Loading...
+      </div>
+    );
+  }
+
+  return children;
 }
 
 function App() {
   return (
     <Provider store={store}>
       <BrowserRouter>
-        <AuthTokenSync />
-        <AppRouter />
+        <AuthBootstrap>
+          <AppRouter />
+        </AuthBootstrap>
         <Toaster
           position="top-right"
           toastOptions={{

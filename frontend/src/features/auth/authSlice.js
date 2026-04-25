@@ -1,9 +1,43 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+const AUTH_STORAGE_KEY = 'lms_auth';
+
+const readPersistedAuth = () => {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    try {
+        const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed?.token || !parsed?.user) return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+};
+
+const persistAuth = (user, token) => {
+    if (typeof window === 'undefined') return;
+
+    try {
+        if (!user || !token) {
+            window.localStorage.removeItem(AUTH_STORAGE_KEY);
+            return;
+        }
+
+        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token }));
+    } catch {
+    }
+};
+
+const persisted = readPersistedAuth();
+
 const initialState = {
-    user: null,
-    token: null,
-    isAuthenticated: false,
+    user: persisted?.user || null,
+    token: persisted?.token || null,
+    isAuthenticated: Boolean(persisted?.token && persisted?.user),
     loading: false,
     error: null,
     pendingVerificationEmail: null,
@@ -23,6 +57,7 @@ const authSlice = createSlice({
             state.token = action.payload.token;
             state.isAuthenticated = true;
             state.error = null;
+            persistAuth(action.payload.user, action.payload.token);
         },
         loginFailure(state, action) {
             state.loading = false;
@@ -39,9 +74,11 @@ const authSlice = createSlice({
             state.token = null;
             state.isAuthenticated = false;
             state.pendingVerificationEmail = null;
+            persistAuth(null, null);
         },
         updateUser(state, action) {
             state.user = { ...state.user, ...action.payload };
+            persistAuth(state.user, state.token);
         },
     },
 });

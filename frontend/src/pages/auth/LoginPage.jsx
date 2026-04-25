@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
@@ -18,6 +18,8 @@ const roleDashboards = {
     [ROLES.ADMIN]: ROUTES.ADMIN_DASHBOARD,
 };
 
+const AUTH_STORAGE_KEY = 'lms_auth';
+
 export default function LoginPage() {
     const [form, setForm] = useState({ email: '', password: '' });
     const [showPass, setShowPass] = useState(false);
@@ -25,6 +27,7 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const location = useLocation();
 
     const validate = () => {
         const errs = {};
@@ -39,11 +42,22 @@ export default function LoginPage() {
     };
 
     const navigateByRole = (role) => {
+        const fromPath = location.state?.from?.pathname;
+        if (fromPath && fromPath !== ROUTES.LOGIN) {
+            navigate(fromPath, { replace: true });
+            return;
+        }
+
         const targetPath = roleDashboards[role] || ROUTES.LEARNER_DASHBOARD;
         navigate(targetPath, { replace: true });
     };
 
     const applyAuth = (data) => {
+        try {
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user: data?.user, token: data?.token }));
+        } catch (_error) {
+            void _error;
+        }
         setAuthToken(data.token);
         dispatch(loginSuccess(data));
         navigateByRole(data?.user?.role);

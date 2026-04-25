@@ -15,7 +15,7 @@ export const env = {
 	port: Number(process.env.PORT) || 5000,
 	mongoUri: process.env.MONGODB_URI,
 	jwtSecret: process.env.JWT_SECRET,
-	jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+	jwtExpiresIn: process.env.JWT_EXPIRES_IN || '30d',
 	bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS) || 10,
 	clientUrl: process.env.CLIENT_URL || '*',
 	googleClientId: process.env.GOOGLE_CLIENT_ID || '',
@@ -28,4 +28,7 @@ export const env = {
 	defaultFromEmail: process.env.DEFAULT_FROM_EMAIL || process.env.EMAIL_HOST_USER || '',
 	emailAllowSelfSigned: String(process.env.EMAIL_ALLOW_SELF_SIGNED || 'true').toLowerCase() === 'true',
 	resetPasswordExpiresMinutes: Number(process.env.RESET_PASSWORD_EXPIRES_MINUTES) || 15,
+	agoraAppId: process.env.AGORA_APP_ID || '',
+	agoraAppCertificate: process.env.AGORA_APP_CERTIFICATE || '',
+	agoraTokenExpireSeconds: Number(process.env.AGORA_TOKEN_EXPIRE_SECONDS) || 3600,
 };

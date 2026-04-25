@@ -65,6 +65,17 @@ export const markMessageAsRead = (messageId) => api.patch(`/messages/${messageId
 export const deleteMessage = (messageId) => api.delete(`/messages/${messageId}`).then(unwrap);
 export const fetchUnreadCount = () => api.get('/messages/unread-count').then(unwrap);
 
+// ── Message Access Requests ──
+export const requestMessageAccess = (instructorId, note = '') =>
+    api.post('/message-access/request', { instructorId, note }).then(unwrap);
+export const fetchMessageAccessStatus = (instructorId) =>
+    api.get(`/message-access/status/${instructorId}`).then(unwrap);
+export const checkMessageAccessApproved = (instructorId) =>
+    api.get(`/message-access/check/${instructorId}`).then(unwrap);
+
+// ── Agora / Calls ──
+export const fetchAgoraToken = (payload) => api.post('/agora/token', payload).then(unwrap);
+
 // ── Announcements ──
 export const fetchAnnouncements = () => api.get('/announcements').then(unwrap);
 export const fetchAnnouncementById = (announcementId) => api.get(`/announcements/${announcementId}`).then(unwrap);

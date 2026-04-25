@@ -14,6 +14,7 @@ const router = express.Router();
 
 router.get('/learner', authenticate, learnerDashboardController);
 router.get('/instructor', authenticate, isInstructorOrAdmin, instructorDashboardController);
+router.get('/instructor/stats', authenticate, isInstructorOrAdmin, instructorDashboardController); // Using same controller for now or specialized one
 router.get('/leaderboard', authenticate, leaderboardController);
 router.get('/grades', authenticate, gradesController);
 router.get('/stats', authenticate, statsController);

@@ -52,3 +52,8 @@ export const uploadAssignmentFile = createUploader({
 		'image/jpeg',
 	],
 });
+
+export const uploadThumbnail = createUploader({
+	folder: 'thumbnails',
+	allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'],
+});

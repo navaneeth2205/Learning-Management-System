@@ -4,7 +4,6 @@ import {
     HiAcademicCap, HiClock, HiPlay, HiCheckCircle,
     HiCollection, HiFilter, HiSearch, HiChevronRight, HiStar, HiUsers
 } from 'react-icons/hi';
-import { mockCourses } from '../../data/mockData';
 import { ROUTES } from '../../constants/routes';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -47,28 +46,25 @@ export default function MyLearning() {
         load();
     }, []);
 
-    // Build courses list from enrollments or mock
+    // Build courses list from enrollments
     const courses = useMemo(() => {
-        if (enrollments.length > 0) {
-            return enrollments.map(e => {
-                const c = e.courseId || {};
-                const cId = c._id || c;
-                return {
-                    id: cId,
-                    _id: cId,
-                    title: c.title || 'Unknown Course',
-                    category: c.category || 'General',
-                    difficulty: c.difficulty || 'Beginner',
-                    duration: c.duration || '',
-                    thumbnail: c.thumbnail || '',
-                    instructorName: c.instructorId?.name || 'Instructor',
-                    lessons: c.enrolledCount || 0,
-                    progress: progressMap[cId?.toString?.()] ?? 0,
-                    enrolledAt: e.enrolledAt,
-                };
-            });
-        }
-        return mockCourses.filter(c => c.progress !== undefined);
+        return enrollments.map(e => {
+            const c = e.courseId || {};
+            const cId = c._id || c;
+            return {
+                id: cId,
+                _id: cId,
+                title: c.title || 'Unknown Course',
+                category: c.category || 'General',
+                difficulty: c.difficulty || 'Beginner',
+                duration: c.duration || '',
+                thumbnail: c.thumbnail || '',
+                instructorName: c.instructorId?.name || 'Instructor',
+                lessons: c.enrolledCount || 0,
+                progress: progressMap[cId?.toString?.()] ?? 0,
+                enrolledAt: e.enrolledAt,
+            };
+        });
     }, [enrollments, progressMap]);
 
     const inProgress = courses.filter(c => c.progress > 0 && c.progress < 100);

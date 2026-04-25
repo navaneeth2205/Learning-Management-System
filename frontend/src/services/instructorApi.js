@@ -55,3 +55,8 @@ export const fetchCourseAnalytics = (courseId) => api.get(`/analytics/course/${c
 // ── Communications ──
 export const fetchQuestions = () => api.get('/communication/questions').then(unwrap);
 export const answerQuestion = (questionId, answer) => api.post(`/communication/questions/${questionId}/answer`, { answer }).then(unwrap);
+
+// ── Message Access Requests ──
+export const fetchIncomingMessageAccessRequests = () => api.get('/message-access/instructor/me').then(unwrap);
+export const approveMessageAccessRequest = (requestId) => api.patch(`/message-access/${requestId}/approve`).then(unwrap);
+export const rejectMessageAccessRequest = (requestId) => api.patch(`/message-access/${requestId}/reject`).then(unwrap);

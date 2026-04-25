@@ -10,6 +10,8 @@ import { clearPendingVerificationEmail, loginSuccess } from '../../features/auth
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 
+const AUTH_STORAGE_KEY = 'lms_auth';
+
 export default function OtpVerifyPage() {
     const location = useLocation();
     const navigate = useNavigate();
@@ -64,6 +66,11 @@ export default function OtpVerifyPage() {
                 email: email.trim(),
                 otp: otp.join(''),
             });
+
+            try {
+                localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user: data?.user, token: data?.token }));
+            } catch {
+            }
 
             dispatch(loginSuccess(data));
             dispatch(clearPendingVerificationEmail());

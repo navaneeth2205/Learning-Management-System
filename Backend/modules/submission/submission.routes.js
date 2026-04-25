@@ -1,5 +1,5 @@
 import express from 'express';
-
+import { getPendingSubmissions } from './submission.controller.js';
 import { authenticate } from '../../middleware/auth.middleware.js';
 import { isInstructorOrAdmin, isLearnerOrAdmin } from '../../middleware/role.middleware.js';
 import { uploadAssignmentFile } from '../../middleware/upload.middleware.js';
@@ -16,5 +16,6 @@ router.post('/', authenticate, isLearnerOrAdmin, uploadAssignmentFile.single('fi
 router.get('/me', authenticate, mySubmissionsController);
 router.patch('/:submissionId/grade', authenticate, isInstructorOrAdmin, gradeSubmissionController);
 router.get('/assignment/:assignmentId', authenticate, isInstructorOrAdmin, listSubmissionsByAssignmentController);
+router.get('/pending', authenticate, isInstructorOrAdmin, getPendingSubmissions);
 
 export default router;

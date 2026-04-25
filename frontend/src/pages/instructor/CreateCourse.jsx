@@ -15,7 +15,23 @@ import { createCourse } from '../../services/instructorApi';
 import toast from 'react-hot-toast';
 
 export default function CreateCourse() {
+    const [step, setStep] = useState(1);
+    const navigate = useNavigate();
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const [formData, setFormData] = useState({
+        title: '',
+        category: '',
+        difficulty: '',
+        description: '',
+        thumbnail: null,
+    });
+
+    const steps = [
+        { n: 1, label: 'Basic Info', icon: HiDocumentText },
+        { n: 2, label: 'Curriculum', icon: HiAcademicCap },
+        { n: 3, label: 'Publish Settings', icon: HiCheck },
+    ];
 
     const handleSubmit = async () => {
         setIsSubmitting(true);
@@ -24,6 +40,10 @@ export default function CreateCourse() {
             const payload = new FormData();
             payload.append('title', formData.title);
             payload.append('category', formData.category);
+            if (formData.difficulty) {
+                const normalizedDifficulty = formData.difficulty.charAt(0).toUpperCase() + formData.difficulty.slice(1);
+                payload.append('difficulty', normalizedDifficulty);
+            }
             payload.append('description', formData.description);
             if (formData.thumbnail) payload.append('thumbnail', formData.thumbnail);
 
@@ -31,7 +51,7 @@ export default function CreateCourse() {
             toast.success('Course published successfully!', { id: toastId });
             navigate(ROUTES.INSTRUCTOR_COURSES);
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Failed to publish course', { id: toastId });
+            toast.error(err.message || 'Failed to publish course', { id: toastId });
         } finally {
             setIsSubmitting(false);
         }

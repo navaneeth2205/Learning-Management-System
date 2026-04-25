@@ -67,18 +67,20 @@ export default function InstructorDashboard() {
             .then(data => {
                 if (data) {
                     setStats([
-                        { ...statsItems[0], value: data.totalEnrollments || 4200 },
-                        { ...statsItems[1], value: data.avgAttendance || 92 },
-                        { ...statsItems[2], value: data.pendingGrading || 0 },
-                        { ...statsItems[3], value: data.avgRating || 4.9 },
+                        { ...statsItems[0], value: Number(data.totalEnrollments) || 4200 },
+                        { ...statsItems[1], value: Number(data.avgAttendance) || 92 },
+                        { ...statsItems[2], value: Number(data.pendingGrading) || 0 },
+                        { ...statsItems[3], value: Number(data.avgRating) || 4.9 },
                     ]);
                 }
             })
-            .catch(() => {});
+            .catch(err => {
+                console.error("Dashboard Stats Fetch Error:", err);
+            });
 
         fetchPendingSubmissions()
             .then(data => {
-                if (data && data.length > 0) {
+                if (data && Array.isArray(data)) {
                     setSubmissions(data.map(s => ({
                         name: s.studentId?.name || 'Student',
                         course: s.courseId?.title || 'Course',
@@ -87,7 +89,9 @@ export default function InstructorDashboard() {
                     })));
                 }
             })
-            .catch(() => {});
+            .catch(err => {
+                console.error("Pending Submissions Fetch Error:", err);
+            });
     }, []);
 
     const performanceData = [

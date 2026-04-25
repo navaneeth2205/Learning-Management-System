@@ -15,6 +15,8 @@ import communityRoutes from '../modules/community/community.routes.js';
 import messageRoutes from '../modules/message/message.routes.js';
 import announcementRoutes from '../modules/announcement/announcement.routes.js';
 import dashboardRoutes from '../modules/dashboard/dashboard.routes.js';
+import messageAccessRoutes from '../modules/message-access/messageAccess.routes.js';
+import agoraRoutes from '../modules/agora/agora.routes.js';
 
 const router = express.Router();
 
@@ -34,9 +36,11 @@ router.get('/', (req, res) => {
 			'/api/progress',
 			'/api/quizzes',
 			'/api/communication',
+			'/api/message-access',
 			'/api/certificates',
 			'/api/community',
 			'/api/messages',
+			'/api/agora',
 			'/api/announcements',
 			'/api/dashboard',
 		],
@@ -61,9 +65,11 @@ router.use('/submissions', submissionRoutes);
 router.use('/progress', progressRoutes);
 router.use('/quizzes', quizRoutes);
 router.use('/communication', communicationRoutes);
+router.use('/message-access', messageAccessRoutes);
 router.use('/certificates', certificateRoutes);
 router.use('/community', communityRoutes);
 router.use('/messages', messageRoutes);
+router.use('/agora', agoraRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/dashboard', dashboardRoutes);
 
