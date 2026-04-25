@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { GoogleLogin } from '@react-oauth/google';
@@ -23,11 +23,27 @@ const AUTH_STORAGE_KEY = 'lms_auth';
 export default function LoginPage() {
     const [form, setForm] = useState({ email: '', password: '' });
     const [showPass, setShowPass] = useState(false);
+    const [rememberMe, setRememberMe] = useState(false);
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const location = useLocation();
+
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem('lms_saved_credentials');
+            if (saved) {
+                const { email, password } = JSON.parse(saved);
+                if (email && password) {
+                    setForm({ email, password });
+                    setRememberMe(true);
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to load saved credentials', e);
+        }
+    }, []);
 
     const validate = () => {
         const errs = {};
@@ -81,6 +97,15 @@ export default function LoginPage() {
                 email: form.email.trim(),
                 password: form.password,
             });
+
+            if (rememberMe) {
+                localStorage.setItem('lms_saved_credentials', JSON.stringify({
+                    email: form.email.trim(),
+                    password: form.password
+                }));
+            } else {
+                localStorage.removeItem('lms_saved_credentials');
+            }
 
             applyAuth(data);
             toast.success('Login successful');
@@ -192,7 +217,12 @@ export default function LoginPage() {
 
                         <div className="flex items-center justify-between px-1">
                             <label className="flex items-center gap-2.5 text-xs font-bold text-slate-500 cursor-pointer group">
-                                <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500/20 transition-all cursor-pointer" />
+                                <input 
+                                    type="checkbox" 
+                                    checked={rememberMe}
+                                    onChange={(e) => setRememberMe(e.target.checked)}
+                                    className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500/20 transition-all cursor-pointer" 
+                                />
                                 <span className="group-hover:text-slate-700">Remember session</span>
                             </label>
                             <Link to={ROUTES.FORGOT_PASSWORD} className="text-xs font-black text-primary-600 hover:text-primary-700 tracking-tight uppercase">

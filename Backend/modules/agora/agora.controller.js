@@ -8,10 +8,14 @@ const { RtcRole, RtcTokenBuilder } = AgoraToken;
 
 export const generateAgoraTokenController = async (req, res, next) => {
 	try {
-		const effectiveAppId = String(req.body.appId || env.agoraAppId || '').trim();
+		const effectiveAppId = String(env.agoraAppId || '').trim();
 
 		if (!effectiveAppId) {
-			throw createAppError('Agora server configuration is missing', 500);
+			throw createAppError('Agora App ID is not configured on the server', 500);
+		}
+
+		if (!env.agoraAppCertificate) {
+			throw createAppError('Agora App Certificate is not configured on the server', 500);
 		}
 
 		const channelName = String(req.body.channelName || '').trim();
@@ -19,30 +23,25 @@ export const generateAgoraTokenController = async (req, res, next) => {
 			throw createAppError('channelName is required', 400);
 		}
 
-		const uid = String(req.body.uid || req.user?._id || '').trim();
-		if (!uid) {
-			throw createAppError('uid is required', 400);
-		}
+		// Use 0 for uid to allow any user to join (Agora supports uid=0 for auto-assign)
+		const uid = 0;
 
-		const expireSeconds = Number(req.body.expireSeconds) || env.agoraTokenExpireSeconds;
-		let token = null;
-		let privilegeExpiredTs = null;
+		const expireSeconds = Number(req.body.expireSeconds) || env.agoraTokenExpireSeconds || 3600;
+		const currentTimestamp = Math.floor(Date.now() / 1000);
+		const privilegeExpiredTs = currentTimestamp + expireSeconds;
 
-		if (env.agoraAppCertificate) {
-			privilegeExpiredTs = Math.floor(Date.now() / 1000) + expireSeconds;
-			const role = RtcRole.PUBLISHER;
-			token = RtcTokenBuilder.buildTokenWithUid(
-				effectiveAppId,
-				env.agoraAppCertificate,
-				channelName,
-				uid,
-				role,
-				privilegeExpiredTs
-			);
-		}
+		const role = RtcRole.PUBLISHER;
+		const token = RtcTokenBuilder.buildTokenWithUid(
+			effectiveAppId,
+			env.agoraAppCertificate,
+			channelName,
+			uid,
+			role,
+			privilegeExpiredTs
+		);
 
 		return successResponse(res, {
-			message: token ? 'Agora token generated successfully' : 'Agora token not required for this configuration',
+			message: 'Agora token generated successfully',
 			data: {
 				token,
 				appId: effectiveAppId,

@@ -2,94 +2,51 @@ import { useEffect, useRef, useState } from 'react';
 import { HiPhoneMissedCall, HiMicrophone, HiVideoCamera, HiX, HiChevronDoubleRight, HiChevronDoubleLeft } from 'react-icons/hi';
 import AgoraRTC from 'agora-rtc-sdk-ng';
 import { AGORA_APP_ID } from '../../config/agora';
-import { fetchAgoraToken } from '../../services/learnerApi';
+import { api } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
+const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+
 export default function CallModal({ channelName, isOpen, onClose, isVideo = true }) {
-    const [localTracks, setLocalTracks] = useState([]);
+    const [localAudioTrack, setLocalAudioTrack] = useState(null);
+    const [localVideoTrack, setLocalVideoTrack] = useState(null);
     const [remoteUsers, setRemoteUsers] = useState([]);
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
-    const [joinError, setJoinError] = useState('');
-    const [callPhase, setCallPhase] = useState('setup'); // setup | connecting | live
-    const [permissionStatus, setPermissionStatus] = useState({ audio: false, video: !isVideo, error: '' });
+    const [isConnecting, setIsConnecting] = useState(false);
+    const [connectionError, setConnectionError] = useState(null);
     
-    const clientRef = useRef(null);
-    const localTracksRef = useRef([]);
-    const localVideoRef = useRef(null);
     const remoteVideoRefs = useRef({});
+    // Keep refs to tracks so we can synchronously clean them up on unmount
+    const tracksRef = useRef({ audio: null, video: null });
+
+    // Use a callback ref for the local video
+    const localVideoRef = useRef(null);
+    const setLocalVideoRef = (el) => {
+        localVideoRef.current = el;
+        if (el && tracksRef.current.video) {
+            tracksRef.current.video.play(el);
+        }
+    };
+
+    // We MUST use an effect to play the track when it becomes available,
+    // because the track is created async AFTER the DOM element mounts.
+    useEffect(() => {
+        if (localVideoTrack && localVideoRef.current) {
+            localVideoTrack.play(localVideoRef.current);
+        }
+    }, [localVideoTrack]);
 
     useEffect(() => {
         if (!isOpen) return;
 
-        setLocalTracks([]);
-        setRemoteUsers([]);
-        setIsMuted(false);
-        setIsVideoOff(false);
-        setIsMinimized(false);
-        setJoinError('');
-        setCallPhase('setup');
-        setPermissionStatus({ audio: false, video: !isVideo, error: '' });
+        let isMounted = true;
 
-        return () => {
-            // no-op; cleanup happens on end call / unmount in the other effect
-        };
-    }, [isOpen, channelName, isVideo]);
-
-    const cleanupCall = async () => {
-        const tracks = localTracksRef.current;
-        tracks.forEach(track => {
-            track.stop();
-            track.close();
-        });
-        localTracksRef.current = [];
-        setLocalTracks([]);
-        setRemoteUsers([]);
-
-        if (clientRef.current) {
-            clientRef.current.removeAllListeners();
-            try {
-                await clientRef.current.leave();
-            } catch {
-            }
-            clientRef.current = null;
-        }
-    };
-
-    useEffect(() => () => {
-        cleanupCall().catch(() => {});
-    }, []);
-
-    const requestPermissions = async () => {
-        if (!navigator.mediaDevices?.getUserMedia) {
-            throw new Error('This browser does not support camera or microphone access');
-        }
-
-        const constraints = isVideo
-            ? { audio: true, video: true }
-            : { audio: true, video: false };
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        stream.getTracks().forEach(track => track.stop());
-        setPermissionStatus({ audio: true, video: isVideo ? true : false, error: '' });
-    };
-
-    const startCall = async () => {
-        if (!AGORA_APP_ID) {
-            toast.error('Agora App ID is missing');
-            return;
-        }
-
-        setCallPhase('connecting');
-        setJoinError('');
-
-        try {
-            await requestPermissions();
-
-            const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
-            clientRef.current = client;
+        const init = async () => {
+            setIsConnecting(true);
+            setConnectionError(null);
 
             client.on('user-published', async (user, mediaType) => {
                 await client.subscribe(user, mediaType);
@@ -108,48 +65,91 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                 setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
             });
 
-            const uid = String(localStorage.getItem('agora_uid') || Date.now().toString());
-            localStorage.setItem('agora_uid', uid);
-
-            const tokenResponse = await fetchAgoraToken({
-                channelName,
-                uid,
-                appId: AGORA_APP_ID,
-                expireSeconds: 3600,
-            });
-
-            const token = tokenResponse?.token || null;
-
-            await client.join(AGORA_APP_ID, channelName, token, uid);
-            const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-            let videoTrack = null;
-
-            if (isVideo) {
-                videoTrack = await AgoraRTC.createCameraVideoTrack();
-                const createdTracks = [audioTrack, videoTrack];
-                localTracksRef.current = createdTracks;
-                setLocalTracks(createdTracks);
-                await client.publish([audioTrack, videoTrack]);
-                if (localVideoRef.current) {
-                    videoTrack.play(localVideoRef.current);
+            try {
+                // Step 1: Request permissions and create local tracks FIRST
+                const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                tracksRef.current.audio = audioTrack;
+                if (isMounted) setLocalAudioTrack(audioTrack);
+                
+                if (isVideo) {
+                    const videoTrack = await AgoraRTC.createCameraVideoTrack();
+                    tracksRef.current.video = videoTrack;
+                    if (isMounted) {
+                        setLocalVideoTrack(videoTrack);
+                        // If the ref is already attached to DOM, play it
+                        if (localVideoRef.current) {
+                            videoTrack.play(localVideoRef.current);
+                        }
+                    }
                 }
-            } else {
-                const createdTracks = [audioTrack];
-                localTracksRef.current = createdTracks;
-                setLocalTracks(createdTracks);
-                await client.publish([audioTrack]);
+            } catch (mediaErr) {
+                console.error('Media permission error:', mediaErr);
+                if (isMounted) {
+                    setConnectionError('Camera/Microphone permission denied.');
+                    setIsConnecting(false);
+                }
+                return;
             }
 
-            setCallPhase('live');
-        } catch (error) {
-            console.error('Agora join error:', error);
-            setJoinError(error?.message || 'Failed to start call');
-            setPermissionStatus(prev => ({ ...prev, error: error?.message || 'Permission or connection failed' }));
-            setCallPhase('setup');
-            await cleanupCall();
-            toast.error(error?.message || 'Failed to start call. Check camera/microphone permissions.');
-        }
-    };
+            try {
+                // Step 2: Fetch a token from the backend
+                let token = null;
+                let appId = AGORA_APP_ID;
+
+                try {
+                    const response = await api.post('/agora/token', { channelName });
+                    const data = response.data?.data;
+                    if (data?.token) token = data.token;
+                    if (data?.appId) appId = data.appId;
+                } catch (tokenErr) {
+                    console.error('Token fetch failed strictly:', tokenErr);
+                    toast.error(`Backend Token Error: ${tokenErr?.response?.data?.message || tokenErr.message}`);
+                }
+
+                // Step 3: Join the channel
+                await client.join(appId, channelName, token, null);
+
+                // Step 4: Publish tracks
+                if (isMounted) {
+                    if (isVideo && tracksRef.current.video) {
+                        await client.publish([tracksRef.current.audio, tracksRef.current.video]);
+                    } else if (tracksRef.current.audio) {
+                        await client.publish([tracksRef.current.audio]);
+                    }
+                    setIsConnecting(false);
+                    toast.success(isVideo ? 'Video call connected!' : 'Audio call connected!');
+                }
+            } catch (error) {
+                console.error('Agora join error:', error);
+                if (isMounted) {
+                    setIsConnecting(false);
+                    setConnectionError(error.message || 'Failed to connect to the call');
+                    toast.error('Connection failed: ' + error.message);
+                }
+            }
+        };
+
+        init();
+
+        return () => {
+            isMounted = false;
+            // Synchronous cleanup to prevent track leaks in React Strict Mode
+            if (tracksRef.current.audio) {
+                tracksRef.current.audio.stop();
+                tracksRef.current.audio.close();
+                tracksRef.current.audio = null;
+            }
+            if (tracksRef.current.video) {
+                tracksRef.current.video.stop();
+                tracksRef.current.video.close();
+                tracksRef.current.video = null;
+            }
+            if (client.connectionState === 'CONNECTED') {
+                client.leave().catch(console.error);
+            }
+            client.removeAllListeners();
+        };
+    }, [isOpen, channelName, isVideo]);
 
     useEffect(() => {
         remoteUsers.forEach(user => {
@@ -160,20 +160,35 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
     }, [remoteUsers]);
 
     const handleEndCall = async () => {
-        await cleanupCall();
+        if (tracksRef.current.audio) {
+            tracksRef.current.audio.stop();
+            tracksRef.current.audio.close();
+            tracksRef.current.audio = null;
+        }
+        if (tracksRef.current.video) {
+            tracksRef.current.video.stop();
+            tracksRef.current.video.close();
+            tracksRef.current.video = null;
+        }
+        setLocalAudioTrack(null);
+        setLocalVideoTrack(null);
+        setRemoteUsers([]);
+        if (client.connectionState === 'CONNECTED') {
+            await client.leave();
+        }
         onClose();
     };
 
     const toggleMute = () => {
-        if (localTracks[0]) {
-            localTracks[0].setEnabled(isMuted);
+        if (localAudioTrack) {
+            localAudioTrack.setEnabled(isMuted);
             setIsMuted(!isMuted);
         }
     };
 
     const toggleVideo = () => {
-        if (localTracks[1]) {
-            localTracks[1].setEnabled(isVideoOff);
+        if (localVideoTrack) {
+            localVideoTrack.setEnabled(isVideoOff);
             setIsVideoOff(!isVideoOff);
         }
     };
@@ -187,12 +202,6 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                 ? "bottom-6 right-6 w-72 h-48 rounded-3xl" 
                 : "inset-6 md:inset-12 rounded-[40px] bg-slate-900"
         )}>
-            {joinError && (
-                <div className="absolute top-6 left-6 z-20 max-w-lg rounded-2xl bg-rose-500/90 text-white px-4 py-3 text-sm shadow-xl">
-                    {joinError}
-                </div>
-            )}
-
             {/* Header / Controls */}
             <div className="absolute top-6 right-6 z-10 flex gap-2">
                 <button 
@@ -209,80 +218,49 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                 </button>
             </div>
 
-            {callPhase !== 'live' ? (
-                <div className="flex-1 relative bg-slate-950 flex items-center justify-center p-6">
-                    <div className="w-full max-w-2xl bg-white/5 border border-white/10 rounded-[32px] p-8 text-center space-y-6 backdrop-blur-md">
-                        <div className="space-y-3">
-                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-500/15 text-indigo-300">
-                                {isVideo ? <HiVideoCamera className="w-8 h-8" /> : <HiMicrophone className="w-8 h-8" />}
-                            </div>
-                            <h3 className="text-2xl font-black text-white tracking-tight">
-                                {isVideo ? 'Video call setup' : 'Audio call setup'}
-                            </h3>
-                            <p className="text-sm text-indigo-100/70 max-w-lg mx-auto">
-                                Browser permission is required before the call starts. Press the button below to allow access and join the room.
-                            </p>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-                            <div className="rounded-2xl bg-slate-900/70 border border-white/10 p-4">
-                                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-2">Microphone</p>
-                                <p className={clsx("text-sm font-semibold", permissionStatus.audio ? 'text-emerald-300' : 'text-slate-200')}>
-                                    {permissionStatus.audio ? 'Ready' : 'Will be requested'}
-                                </p>
-                            </div>
-                            <div className="rounded-2xl bg-slate-900/70 border border-white/10 p-4">
-                                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-2">Camera</p>
-                                <p className={clsx("text-sm font-semibold", isVideo ? 'text-emerald-300' : 'text-slate-200')}>
-                                    {isVideo ? (permissionStatus.video ? 'Ready' : 'Will be requested') : 'Not needed for audio call'}
-                                </p>
-                            </div>
-                        </div>
-
-                        {permissionStatus.error && (
-                            <div className="rounded-2xl bg-rose-500/10 border border-rose-400/30 text-rose-200 px-4 py-3 text-sm">
-                                {permissionStatus.error}
-                            </div>
-                        )}
-
-                        <div className="flex flex-col sm:flex-row justify-center gap-3">
-                            <button
-                                onClick={startCall}
-                                disabled={callPhase === 'connecting'}
-                                className="px-6 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition-all disabled:opacity-70"
-                            >
-                                {callPhase === 'connecting' ? 'Starting...' : 'Allow Permission & Start Call'}
-                            </button>
-                            <button
-                                onClick={() => requestPermissions().catch((error) => {
-                                    setPermissionStatus(prev => ({ ...prev, error: error?.message || 'Permission denied' }));
-                                    toast.error(error?.message || 'Permission denied');
-                                })}
-                                className="px-6 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold transition-all"
-                            >
-                                Check Permissions
-                            </button>
-                        </div>
+            {/* Video Grid */}
+            <div className="flex-1 relative bg-slate-950 flex flex-wrap items-center justify-center p-4 gap-4">
+                {/* Connecting State */}
+                {isConnecting && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4 z-30 bg-slate-950">
+                        <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-indigo-200/70 font-black uppercase tracking-[0.3em] text-[10px]">
+                            Connecting...
+                        </p>
                     </div>
-                </div>
-            ) : (
-                /* Video Grid */
-                <div className="flex-1 relative bg-slate-950 flex flex-wrap items-center justify-center p-4 gap-4">
+                )}
+
+                {/* Error State */}
+                {connectionError && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4 z-30 bg-slate-950">
+                        <HiPhoneMissedCall className="w-12 h-12 text-rose-400" />
+                        <p className="text-rose-300 font-bold text-sm max-w-xs">{connectionError}</p>
+                        <button 
+                            onClick={handleEndCall}
+                            className="px-6 py-2 bg-rose-500 text-white rounded-xl font-bold text-xs hover:bg-rose-600 transition-colors"
+                        >
+                            Close
+                        </button>
+                    </div>
+                )}
+
                 {/* Local Video */}
-                <div className={clsx(
-                    "relative overflow-hidden rounded-3xl bg-slate-800 border-2 border-white/10 shadow-lg",
-                    remoteUsers.length === 0 ? "w-full h-full" : "w-1/3 aspect-video absolute bottom-6 left-6 z-20"
-                )}>
-                    <div ref={localVideoRef} className="w-full h-full object-cover" />
-                    <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/40 backdrop-blur-md rounded-full text-[10px] text-white font-black uppercase tracking-widest">
-                        You {isVideoOff && "(Video Off)"}
+                {!connectionError && (
+                    <div className={clsx(
+                        "relative overflow-hidden rounded-3xl bg-slate-800 border-2 border-white/10 shadow-lg",
+                        remoteUsers.length === 0 ? "w-full h-full" : "w-1/3 aspect-video absolute bottom-6 left-6 z-20"
+                    )}>
+                        <div ref={setLocalVideoRef} className="w-full h-full object-cover" />
+                        <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/40 backdrop-blur-md rounded-full text-[10px] text-white font-black uppercase tracking-widest">
+                            You {isVideoOff && "(Video Off)"}
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Remote Videos */}
-                {remoteUsers.map(user => (
+                {remoteUsers.map((user, idx) => (
                     <div 
-                        key={user.uid} 
+                        key={`${user.uid}-${idx}`} 
                         className={clsx(
                             "relative overflow-hidden rounded-3xl bg-slate-800 border-2 border-white/10 shadow-lg",
                             remoteUsers.length === 1 ? "w-full h-full" : "w-[45%] aspect-video"
@@ -298,7 +276,7 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                     </div>
                 ))}
 
-                {remoteUsers.length === 0 && (
+                {!isConnecting && !connectionError && remoteUsers.length === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4">
                         <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center animate-pulse">
                             <HiPhoneMissedCall className="w-10 h-10 text-indigo-400" />
@@ -306,10 +284,12 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                         <p className="text-indigo-200/50 font-black uppercase tracking-[0.3em] text-[10px]">
                             Waiting for others to join...
                         </p>
+                        <p className="text-indigo-200/30 text-[10px] font-medium">
+                            Channel: {channelName}
+                        </p>
                     </div>
                 )}
-                </div>
-            )}
+            </div>
 
             {/* Bottom Controls Bar */}
             {!isMinimized && (

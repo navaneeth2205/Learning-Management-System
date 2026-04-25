@@ -13,52 +13,47 @@ import clsx from 'clsx';
 import { fetchInbox, fetchSentMessages, sendMessageAPI, fetchMessageAccessStatus, requestMessageAccess } from '../../services/learnerApi';
 import CallModal from '../../components/communication/CallModal';
 import { useSelector } from 'react-redux';
+import { useSocket } from '../../context/SocketContext';
 
 /* ─── Font settings ────────────────────────────────────────── */
 const sora = { fontFamily: "'Sora', sans-serif" };
 const mono = { fontFamily: "'DM Mono', monospace" };
-
-/* ─── Mock Data ────────────────────────────────────────────── */
-const INITIAL_CHATS = [
-    { id: 1, name: 'Dr. Michael Torres', role: 'Instructor', status: 'online', lastMsg: 'I reviewed your last assignment. The React logic is perfect!', time: '10:30 AM', unread: 2 },
-    { id: 2, name: 'Sarah Miller', role: 'Student', status: 'offline', lastMsg: 'Hey! Want to join our design study group tomorrow at 2 PM?', time: '2:15 PM', unread: 0 },
-    { id: 3, name: 'Alex Rodriguez', role: 'Career Coach', status: 'online', lastMsg: 'Your updated resume looks much stronger now. Great job!', time: 'Yesterday', unread: 0 },
-    { id: 4, name: 'Skillery Support', role: 'Account Admin', status: 'online', lastMsg: 'Your certification for UI/UX Mastery has been verified.', time: 'Oct 20', unread: 0 },
-];
-
-const INITIAL_MESSAGES = {
-    1: [
-        { id: 1, text: 'Hi Alex, I saw your submission for the design system project.', type: 'received', time: '10:30 AM' },
-        { id: 2, text: 'The way you handled the dark mode variant was really impressive.', type: 'received', time: '10:31 AM' },
-        { id: 3, text: 'Thanks Dr. Torres! I spent a lot of time on the HSL color scaling.', type: 'sent', time: '10:45 AM' },
-        { id: 4, text: 'It shows. One small tip: check the contrast for the success badge in high-brightness mode.', type: 'received', time: '11:00 AM' },
-        { id: 5, text: 'I reviewed your last assignment. The React logic is perfect!', type: 'received', time: '11:05 AM' },
-    ],
-    2: [
-        { id: 1, text: 'Hey! Want to join our design study group tomorrow at 2 PM?', type: 'received', time: '2:15 PM' },
-    ],
-    3: [
-        { id: 1, text: 'Your updated resume looks much stronger now. Great job!', type: 'received', time: 'Yesterday' },
-    ],
-    4: [
-        { id: 1, text: 'Your certification for UI/UX Mastery has been verified.', type: 'received', time: 'Oct 20' },
-    ]
-};
 
 /* ══════════════════════════════════════════════════════════════
    PAGE
    ═══════════════════════════════════════════════════════════════ */
 export default function MessageInbox() {
     const { user } = useSelector(s => s.auth);
-    const [selectedId, setSelectedId] = useState(1);
+    const { socket, onlineUsers } = useSocket();
+    const [selectedId, setSelectedId] = useState(null);
     const [inputText, setInputText] = useState('');
     const [isStartingNew, setIsStartingNew] = useState(false);
-    const [chats, setChats] = useState(INITIAL_CHATS);
-    const [messagesMap, setMessagesMap] = useState(INITIAL_MESSAGES);
+    const [chats, setChats] = useState([]);
+    const [messagesMap, setMessagesMap] = useState({});
     const [showOptions, setShowOptions] = useState(false);
     const [callConfig, setCallConfig] = useState({ isOpen: false, channel: '', isVideo: true });
     const [accessStatus, setAccessStatus] = useState('none');
     const [requestingAccess, setRequestingAccess] = useState(false);
+
+    // Listen for call rejection/unavailability to close the caller's modal
+    useEffect(() => {
+        if (!socket) return;
+        
+        const handleEnd = () => {
+            setCallConfig({ isOpen: false, channel: '', isVideo: true });
+            toast.error('Call declined or user unavailable');
+        };
+
+        socket.on('call:rejected', handleEnd);
+        socket.on('call:unavailable', handleEnd);
+        socket.on('call:ended', handleEnd);
+
+        return () => {
+            socket.off('call:rejected', handleEnd);
+            socket.off('call:unavailable', handleEnd);
+            socket.off('call:ended', handleEnd);
+        };
+    }, [socket]);
     const scrollRef = useRef(null);
     const optionsRef = useRef(null);
 
@@ -138,23 +133,20 @@ export default function MessageInbox() {
                     .filter(Boolean)
                     .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 
-                if (merged.length === 0) return;
-
                 const normalized = normalizeBackendMessages(merged);
-                if (normalized.chats.length > 0) {
-                    setChats(prev => {
-                        const prevMockOnly = prev.every((chat) => typeof chat.id === 'number');
-                        return prevMockOnly ? normalized.chats : [...normalized.chats, ...prev];
-                    });
-                    setMessagesMap(prev => ({ ...prev, ...normalized.messagesMap }));
-
-                    const firstChatId = normalized.chats[0]?.id;
-                    if (firstChatId) {
-                        setSelectedId(firstChatId);
-                    }
+                
+                // Use API data exclusively
+                setChats(normalized.chats);
+                setMessagesMap(normalized.messagesMap);
+                
+                const firstChatId = normalized.chats[0]?.id;
+                if (firstChatId && String(selectedId) === '1') {
+                    setSelectedId(firstChatId);
                 }
             })
-            .catch(() => {});
+            .catch((err) => {
+                console.error('Failed to fetch live messages:', err);
+            });
     }, [user]);
 
     // Close dropdown on outside click
@@ -190,11 +182,15 @@ export default function MessageInbox() {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
 
-        // Clear unread count for the selected chat
-        setChats(prev => prev.map(c =>
-            c.id === selectedId ? { ...c, unread: 0 } : c
-        ));
-    }, [activeMessages, selectedId]);
+        // Clear unread count for the selected chat only if necessary
+        setChats(prev => {
+            const hasUnread = prev.some(c => String(c.id) === String(selectedId) && c.unread > 0);
+            if (!hasUnread) return prev;
+            return prev.map(c =>
+                String(c.id) === String(selectedId) ? { ...c, unread: 0 } : c
+            );
+        });
+    }, [activeMessages.length, selectedId]);
 
     const handleSend = () => {
         if (!inputText.trim()) return;
@@ -334,9 +330,9 @@ export default function MessageInbox() {
                             ))}
                         </div>
                     ) : (
-                        chats.map(chat => (
+                        chats.map((chat, idx) => (
                             <div
-                                key={chat.id}
+                                key={`${chat.id}-${idx}`}
                                 onClick={() => setSelectedId(chat.id)}
                                 className={clsx(
                                     "p-4 rounded-[24px] cursor-pointer flex items-center gap-4 transition-all duration-300 group focus:outline-none",
@@ -347,10 +343,12 @@ export default function MessageInbox() {
                             >
                                 <div className="relative">
                                     <Avatar name={chat.name} size="md" className="ring-2 ring-slate-50 group-hover:ring-indigo-50 transition-all" />
-                                    {chat.status === 'online' && !chat.isBlocked && (
+                                    {onlineUsers?.has(String(chat.id)) && !chat.isBlocked ? (
                                         <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full">
                                             <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-20" />
                                         </span>
+                                    ) : (
+                                        <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-slate-300 border-2 border-white rounded-full"></span>
                                     )}
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -402,9 +400,19 @@ export default function MessageInbox() {
                                     toast.error('Request access first');
                                     return;
                                 }
+                                const channel = getSharedChannelName();
+                                const peerId = activeChat?.receiverId || activeChat?.id;
+                                if (socket && peerId) {
+                                    socket.emit('call:initiate', {
+                                        receiverId: peerId,
+                                        channelName: channel,
+                                        isVideo: false,
+                                        callerName: user?.name || 'User'
+                                    });
+                                }
                                 setCallConfig({ 
                                     isOpen: true, 
-                                    channel: getSharedChannelName(), 
+                                    channel: channel, 
                                     isVideo: false 
                                 });
                             }}
@@ -418,9 +426,19 @@ export default function MessageInbox() {
                                     toast.error('Request access first');
                                     return;
                                 }
+                                const channel = getSharedChannelName();
+                                const peerId = activeChat?.receiverId || activeChat?.id;
+                                if (socket && peerId) {
+                                    socket.emit('call:initiate', {
+                                        receiverId: peerId,
+                                        channelName: channel,
+                                        isVideo: true,
+                                        callerName: user?.name || 'User'
+                                    });
+                                }
                                 setCallConfig({ 
                                     isOpen: true, 
-                                    channel: getSharedChannelName(), 
+                                    channel: channel, 
                                     isVideo: true 
                                 });
                             }}
@@ -481,8 +499,8 @@ export default function MessageInbox() {
                     ref={scrollRef}
                     className="flex-1 overflow-y-auto p-10 space-y-8 bg-slate-50/20 custom-scrollbar scroll-smooth"
                 >
-                    {activeMessages.map((msg) => (
-                        <div key={msg.id} className={clsx("flex flex-col group animate-in slide-in-from-bottom-2 duration-300", msg.type === 'sent' ? "items-end" : "items-start")}>
+                    {activeMessages.map((msg, idx) => (
+                        <div key={`${msg.id}-${idx}`} className={clsx("flex flex-col group animate-in slide-in-from-bottom-2 duration-300", msg.type === 'sent' ? "items-end" : "items-start")}>
                             <div className={clsx(
                                 "max-w-[75%] px-6 py-4 text-sm font-medium shadow-sm transition-all duration-300",
                                 msg.type === 'sent'
@@ -565,7 +583,16 @@ export default function MessageInbox() {
                 isOpen={callConfig.isOpen}
                 channelName={callConfig.channel}
                 isVideo={callConfig.isVideo}
-                onClose={() => setCallConfig({ ...callConfig, isOpen: false })}
+                onClose={() => {
+                    const peerId = activeChat?.receiverId || activeChat?.id;
+                    if (socket && peerId) {
+                        socket.emit('call:end', {
+                            otherUserId: peerId,
+                            channelName: callConfig.channel
+                        });
+                    }
+                    setCallConfig({ isOpen: false, channel: '', isVideo: true });
+                }}
             />
         </div>
     );

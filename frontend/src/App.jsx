@@ -6,6 +6,8 @@ import store from './store/store';
 import AppRouter from './AppRouter';
 import { setAuthToken } from './services/api';
 import { loginSuccess } from './features/auth/authSlice';
+import { SocketProvider } from './context/SocketContext';
+import CallManager from './components/communication/CallManager';
 
 const AUTH_STORAGE_KEY = 'lms_auth';
 
@@ -50,7 +52,10 @@ function App() {
     <Provider store={store}>
       <BrowserRouter>
         <AuthBootstrap>
-          <AppRouter />
+          <SocketProvider>
+            <AppRouter />
+            <CallManager />
+          </SocketProvider>
         </AuthBootstrap>
         <Toaster
           position="top-right"
