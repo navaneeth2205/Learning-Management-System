@@ -3,6 +3,8 @@ import { ROLES } from './constants/roles';
 import { ROUTES } from './constants/routes';
 import ProtectedRoute from './components/ProtectedRoute';
 
+import LandingPage from './pages/common/LandingPage';
+
 // Layouts
 import LearnerLayout from './layouts/LearnerLayout';
 import InstructorLayout from './layouts/InstructorLayout';
@@ -144,9 +146,9 @@ export default function AppRouter() {
                 <Route path="profile" element={<ProfilePage />} />
             </Route>
 
-            {/* Root + catch-all always land on main entry page */}
-            <Route path="/" element={<Navigate to={ROUTES.LOGIN} replace />} />
-            <Route path="*" element={<Navigate to={ROUTES.LOGIN} replace />} />
+            {/* Public landing */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="*" element={<LandingPage />} />
         </Routes>
     );
 }

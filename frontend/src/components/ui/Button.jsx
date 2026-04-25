@@ -9,10 +9,11 @@ const sizeMap = {
 
 const variantMap = {
     primary: 'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 border-transparent',
-    secondary: 'bg-surface-muted text-text-secondary hover:bg-slate-200 focus:ring-slate-300 border-transparent',
-    outline: 'bg-transparent text-text-secondary hover:bg-surface-muted focus:ring-primary-300 border border-surface-border',
+    secondary: 'bg-surface-muted text-slate-700 hover:bg-slate-200 focus:ring-slate-300 border-transparent',
+    outline: 'bg-transparent text-slate-700 hover:bg-surface-muted focus:ring-primary-300 border border-slate-300',
+    inverse: 'bg-white text-slate-900 hover:bg-slate-50 focus:ring-white/40 border border-slate-200',
     danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-400 border-transparent',
-    ghost: 'bg-transparent text-text-secondary hover:bg-surface-muted focus:ring-slate-300 border-transparent',
+    ghost: 'bg-transparent text-slate-700 hover:bg-surface-muted focus:ring-slate-300 border-transparent',
     success: 'bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-400 border-transparent',
     warning: 'bg-amber-500 text-white hover:bg-amber-600 focus:ring-amber-400 border-transparent',
 };
