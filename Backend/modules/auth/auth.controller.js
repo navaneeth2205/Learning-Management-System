@@ -1,6 +1,14 @@
 import { successResponse } from '../../utils/responseHandler.js';
 
-import { loginUser, registerUser } from './auth.service.js';
+import {
+	forgotPassword,
+	loginUser,
+	loginWithGoogle,
+	registerUser,
+	resendRegistrationOtp,
+	resetPassword,
+	verifyRegistrationOtp,
+} from './auth.service.js';
 
 export const register = async (req, res, next) => {
 	try {
@@ -21,6 +29,71 @@ export const login = async (req, res, next) => {
 		return successResponse(res, {
 			statusCode: 200,
 			message: 'Login successful',
+			data,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const verifyOtp = async (req, res, next) => {
+	try {
+		const data = await verifyRegistrationOtp(req.body);
+		return successResponse(res, {
+			statusCode: 200,
+			message: 'OTP verified successfully',
+			data,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const resendOtp = async (req, res, next) => {
+	try {
+		const data = await resendRegistrationOtp(req.body);
+		return successResponse(res, {
+			statusCode: 200,
+			message: 'OTP sent successfully',
+			data,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const googleLogin = async (req, res, next) => {
+	try {
+		const data = await loginWithGoogle(req.body);
+		return successResponse(res, {
+			statusCode: 200,
+			message: 'Google sign-in successful',
+			data,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const requestPasswordReset = async (req, res, next) => {
+	try {
+		const data = await forgotPassword(req.body);
+		return successResponse(res, {
+			statusCode: 200,
+			message: 'Password reset link sent if the account exists',
+			data,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const confirmPasswordReset = async (req, res, next) => {
+	try {
+		const data = await resetPassword(req.body);
+		return successResponse(res, {
+			statusCode: 200,
+			message: 'Password reset successful',
 			data,
 		});
 	} catch (error) {

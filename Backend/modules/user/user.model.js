@@ -18,7 +18,33 @@ const userSchema = new mongoose.Schema(
 		},
 		password: {
 			type: String,
-			required: true,
+			required: false,
+			select: false,
+		},
+		googleId: {
+			type: String,
+			unique: true,
+			sparse: true,
+			trim: true,
+		},
+		isEmailVerified: {
+			type: Boolean,
+			default: true,
+		},
+		otpCodeHash: {
+			type: String,
+			select: false,
+		},
+		otpExpiresAt: {
+			type: Date,
+			select: false,
+		},
+		resetPasswordTokenHash: {
+			type: String,
+			select: false,
+		},
+		resetPasswordExpiresAt: {
+			type: Date,
 			select: false,
 		},
 		role: {

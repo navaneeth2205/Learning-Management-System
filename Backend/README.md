@@ -8,12 +8,16 @@ Production-ready Node.js + Express + MongoDB backend for an enterprise LMS.
 - Express
 - MongoDB with Mongoose
 - JWT authentication
+- Google sign-in with ID token verification
 - Bcrypt password hashing
 - Multer file uploads
+- OTP email verification via SMTP
 
 ## Features
 
 - User registration and login
+- Email OTP verification for registration
+- Forgot password and reset password via email link
 - Role-based authorization for admin, instructor, learner
 - Course management
 - Enrollment with duplicate prevention

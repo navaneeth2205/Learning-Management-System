@@ -8,11 +8,26 @@ import { errorHandler, notFoundHandler } from './middleware/error.middleware.js'
 import { env } from './config/env.js';
 
 const app = express();
+const defaultDevOrigins = ['http://127.0.0.1:5173', 'http://127.0.0.1:5174', 'http://localhost:5173', 'http://localhost:5174'];
+const configuredOrigins = env.clientUrl === '*'
+	? []
+	: env.clientUrl
+			.split(',')
+			.map((origin) => origin.trim())
+			.filter(Boolean);
+const allowedOrigins = new Set([...defaultDevOrigins, ...configuredOrigins]);
 
 app.use(helmet());
 app.use(
 	cors({
-		origin: env.clientUrl,
+		origin(origin, callback) {
+			if (!origin || allowedOrigins.has(origin)) {
+				callback(null, true);
+				return;
+			}
+
+			callback(new Error(`CORS blocked for origin: ${origin}`));
+		},
 		credentials: true,
 	})
 );

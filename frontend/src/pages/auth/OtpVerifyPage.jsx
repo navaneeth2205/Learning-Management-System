@@ -1,16 +1,35 @@
-import { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { HiAcademicCap, HiMail, HiLockClosed, HiEye, HiEyeOff, HiArrowLeft } from 'react-icons/hi';
+import { useMemo, useState, useRef } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
+import toast from 'react-hot-toast';
+import { HiAcademicCap, HiMail, HiArrowLeft } from 'react-icons/hi';
 import { ROUTES } from '../../constants/routes';
+import { ROLES } from '../../constants/roles';
+import { resendOtpApi, verifyOtpApi } from '../../features/auth/authApi';
+import { clearPendingVerificationEmail, loginSuccess } from '../../features/auth/authSlice';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 
 export default function OtpVerifyPage() {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const dispatch = useDispatch();
+    const pendingEmail = useSelector((state) => state.auth.pendingVerificationEmail);
+
+    const initialEmail = useMemo(() => location.state?.email || pendingEmail || '', [location.state?.email, pendingEmail]);
+
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
+    const [email, setEmail] = useState(initialEmail);
     const [loading, setLoading] = useState(false);
-    const [verified, setVerified] = useState(false);
+    const [resending, setResending] = useState(false);
     const [error, setError] = useState('');
     const refs = Array.from({ length: 6 }, () => useRef());
+
+    const roleDashboards = {
+        [ROLES.LEARNER]: ROUTES.LEARNER_DASHBOARD,
+        [ROLES.INSTRUCTOR]: ROUTES.INSTRUCTOR_DASHBOARD,
+        [ROLES.ADMIN]: ROUTES.ADMIN_DASHBOARD,
+    };
 
     const handleChange = (val, i) => {
         if (!/^\d?$/.test(val)) return;
@@ -24,11 +43,60 @@ export default function OtpVerifyPage() {
         if (e.key === 'Backspace' && !otp[i] && i > 0) refs[i - 1].current?.focus();
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (otp.join('').length < 6) { setError('Please enter all 6 digits'); return; }
+
+        if (!email.trim()) {
+            setError('Email is required');
+            return;
+        }
+
+        if (otp.join('').length < 6) {
+            setError('Please enter all 6 digits');
+            return;
+        }
+
+        setError('');
         setLoading(true);
-        setTimeout(() => { setVerified(true); setLoading(false); }, 1200);
+
+        try {
+            const data = await verifyOtpApi({
+                email: email.trim(),
+                otp: otp.join(''),
+            });
+
+            dispatch(loginSuccess(data));
+            dispatch(clearPendingVerificationEmail());
+
+            const targetPath = roleDashboards[data?.user?.role] || ROUTES.LEARNER_DASHBOARD;
+            toast.success('Email verified successfully');
+            navigate(targetPath, { replace: true });
+        } catch (requestError) {
+            setError(requestError.message || 'OTP verification failed');
+            toast.error(requestError.message || 'OTP verification failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResendOtp = async () => {
+        if (!email.trim()) {
+            setError('Enter your email first');
+            return;
+        }
+
+        setError('');
+        setResending(true);
+
+        try {
+            await resendOtpApi({ email: email.trim() });
+            toast.success('A new OTP has been sent to your email');
+        } catch (requestError) {
+            setError(requestError.message || 'Unable to resend OTP');
+            toast.error(requestError.message || 'Unable to resend OTP');
+        } finally {
+            setResending(false);
+        }
     };
 
     return (
@@ -41,43 +109,52 @@ export default function OtpVerifyPage() {
                     <span className="text-xl font-bold">EduVerse LMS</span>
                 </div>
                 <div className="bg-white rounded-2xl border border-surface-border shadow-card-lg p-8">
-                    {verified ? (
-                        <div className="text-center py-4">
-                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">✅</div>
-                            <h3 className="text-xl font-bold text-text-primary mb-2">Verified!</h3>
-                            <p className="text-text-secondary text-sm mb-6">Your email address has been successfully verified. You can now sign in.</p>
-                            <Link to={ROUTES.LOGIN}>
-                                <Button fullWidth>Continue to Login</Button>
-                            </Link>
+                    <div className="w-14 h-14 bg-primary-100 rounded-xl flex items-center justify-center mb-5">
+                        <HiMail className="w-7 h-7 text-primary-600" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-text-primary mb-1">Verify your email</h2>
+                    <p className="text-text-secondary text-sm mb-6">We sent a 6-digit code to your email address. Enter it below to verify your account.</p>
+
+                    <form onSubmit={handleSubmit}>
+                        <Input
+                            label="Email address"
+                            type="email"
+                            placeholder="your@email.com"
+                            value={email}
+                            onChange={(event) => setEmail(event.target.value)}
+                            required
+                        />
+
+                        <div className="flex gap-2 mt-4 mb-2">
+                            {otp.map((v, i) => (
+                                <input key={i} ref={refs[i]} maxLength={1} value={v}
+                                    onChange={e => handleChange(e.target.value, i)}
+                                    onKeyDown={e => handleKeyDown(e, i)}
+                                    className="flex-1 h-12 text-center text-lg font-bold rounded-lg border border-surface-border focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                                />
+                            ))}
                         </div>
-                    ) : (
-                        <>
-                            <div className="w-14 h-14 bg-primary-100 rounded-xl flex items-center justify-center mb-5">
-                                <HiMail className="w-7 h-7 text-primary-600" />
-                            </div>
-                            <h2 className="text-2xl font-bold text-text-primary mb-1">Verify your email</h2>
-                            <p className="text-text-secondary text-sm mb-6">We sent a 6-digit code to your email address. Enter it below to verify your account.</p>
-                            <form onSubmit={handleSubmit}>
-                                <div className="flex gap-2 mb-2">
-                                    {otp.map((v, i) => (
-                                        <input key={i} ref={refs[i]} maxLength={1} value={v}
-                                            onChange={e => handleChange(e.target.value, i)}
-                                            onKeyDown={e => handleKeyDown(e, i)}
-                                            className="flex-1 h-12 text-center text-lg font-bold rounded-lg border border-surface-border focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-                                        />
-                                    ))}
-                                </div>
-                                {error && <p className="text-xs text-red-500 mb-3">{error}</p>}
-                                <Button type="submit" fullWidth loading={loading} size="lg" className="mt-4">Verify Email</Button>
-                            </form>
-                            <div className="mt-5 text-center space-y-2">
-                                <p className="text-sm text-text-secondary">Didn't receive the code? <button className="text-primary-600 font-medium">Resend</button></p>
-                                <Link to={ROUTES.LOGIN} className="text-sm text-text-muted hover:text-text-secondary flex items-center justify-center gap-1">
-                                    <HiArrowLeft className="w-4 h-4" /> Back to login
-                                </Link>
-                            </div>
-                        </>
-                    )}
+
+                        {error && <p className="text-xs text-red-500 mb-3">{error}</p>}
+                        <Button type="submit" fullWidth loading={loading} size="lg" className="mt-4">Verify Email</Button>
+                    </form>
+
+                    <div className="mt-5 text-center space-y-2">
+                        <p className="text-sm text-text-secondary">
+                            Didn't receive the code?{' '}
+                            <button
+                                type="button"
+                                onClick={handleResendOtp}
+                                disabled={resending}
+                                className="text-primary-600 font-medium disabled:opacity-60"
+                            >
+                                {resending ? 'Resending...' : 'Resend'}
+                            </button>
+                        </p>
+                        <Link to={ROUTES.LOGIN} className="text-sm text-text-muted hover:text-text-secondary flex items-center justify-center gap-1">
+                            <HiArrowLeft className="w-4 h-4" /> Back to login
+                        </Link>
+                    </div>
                 </div>
             </div>
         </div>

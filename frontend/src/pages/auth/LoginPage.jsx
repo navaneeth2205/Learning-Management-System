@@ -1,20 +1,18 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
+import { GoogleLogin } from '@react-oauth/google';
+import toast from 'react-hot-toast';
 import { HiMail, HiLockClosed, HiEye, HiEyeOff, HiAcademicCap } from 'react-icons/hi';
-import { loginStart, loginSuccess, loginFailure } from '../../features/auth/authSlice';
+import { loginFailure, loginStart, loginSuccess } from '../../features/auth/authSlice';
+import { googleLoginApi, loginApi } from '../../features/auth/authApi';
+import { setAuthToken } from '../../services/api';
 import { ROUTES } from '../../constants/routes';
 import { ROLES } from '../../constants/roles';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 
-const DEMO_USERS = {
-    learner: { id: 1, name: 'Alex Johnson', email: 'learner@demo.com', role: ROLES.LEARNER, avatar: null },
-    instructor: { id: 3, name: 'Dr. Michael Torres', email: 'instructor@demo.com', role: ROLES.INSTRUCTOR, avatar: null },
-    admin: { id: 5, name: 'Admin User', email: 'admin@demo.com', role: ROLES.ADMIN, avatar: null },
-};
-
-const ROLE_DASHBOARDS = {
+const roleDashboards = {
     [ROLES.LEARNER]: ROUTES.LEARNER_DASHBOARD,
     [ROLES.INSTRUCTOR]: ROUTES.INSTRUCTOR_DASHBOARD,
     [ROLES.ADMIN]: ROUTES.ADMIN_DASHBOARD,
@@ -30,43 +28,88 @@ export default function LoginPage() {
 
     const validate = () => {
         const errs = {};
+
         if (!form.email) errs.email = 'Email is required';
         else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email = 'Enter a valid email';
+
         if (!form.password) errs.password = 'Password is required';
-        else if (form.password.length < 6) errs.password = 'Password must be at least 6 characters';
+        else if (form.password.length < 8) errs.password = 'Password must be at least 8 characters';
+
         return errs;
     };
 
-    const handleDemoLogin = (role) => {
-        dispatch(loginStart());
-        setTimeout(() => {
-            dispatch(loginSuccess({ user: DEMO_USERS[role], token: `mock-token-${role}` }));
-            navigate(ROLE_DASHBOARDS[role]);
-        }, 600);
+    const navigateByRole = (role) => {
+        const targetPath = roleDashboards[role] || ROUTES.LEARNER_DASHBOARD;
+        navigate(targetPath, { replace: true });
+    };
+
+    const applyAuth = (data) => {
+        setAuthToken(data.token);
+        dispatch(loginSuccess(data));
+        navigateByRole(data?.user?.role);
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         const errs = validate();
-        if (Object.keys(errs).length) { setErrors(errs); return; }
+
+        if (Object.keys(errs).length) {
+            setErrors(errs);
+            return;
+        }
+
         setLoading(true);
         setErrors({});
-        // Determine role from email for demo
-        let role = ROLES.LEARNER;
-        if (form.email.includes('instructor')) role = ROLES.INSTRUCTOR;
-        if (form.email.includes('admin')) role = ROLES.ADMIN;
-        setTimeout(() => {
-            dispatch(loginSuccess({ user: { ...DEMO_USERS[role], email: form.email }, token: 'mock-token' }));
-            navigate(ROLE_DASHBOARDS[role]);
+        dispatch(loginStart());
+
+        try {
+            const data = await loginApi({
+                email: form.email.trim(),
+                password: form.password,
+            });
+
+            applyAuth(data);
+            toast.success('Login successful');
+        } catch (error) {
+            dispatch(loginFailure(error.message || 'Login failed'));
+            setErrors({ general: error.message || 'Login failed' });
+            toast.error(error.message || 'Login failed');
+        } finally {
             setLoading(false);
-        }, 1200);
+        }
+    };
+
+    const handleGoogleSuccess = async (credentialResponse) => {
+        const idToken = credentialResponse?.credential;
+
+        if (!idToken) {
+            toast.error('Google sign-in did not return a token');
+            return;
+        }
+
+        setLoading(true);
+        dispatch(loginStart());
+
+        try {
+            const data = await googleLoginApi({
+                idToken,
+                role: ROLES.LEARNER,
+            });
+
+            applyAuth(data);
+            toast.success('Signed in with Google successfully');
+        } catch (error) {
+            dispatch(loginFailure(error.message || 'Google sign-in failed'));
+            setErrors({ general: error.message || 'Google sign-in failed' });
+            toast.error(error.message || 'Google sign-in failed');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
         <div className="min-h-screen flex bg-surface-bg overflow-hidden relative">
-            {/* Left Branding Panel: Animated Gradient Mesh */}
             <div className="hidden lg:flex lg:w-1/2 bg-slate-900 flex-col items-center justify-center p-12 text-white relative overflow-hidden animate-gradient bg-gradient-to-tr from-primary-900 via-violet-900 to-primary-800">
-                {/* Floating SVG Orbs */}
                 <div className="absolute top-20 left-20 w-64 h-64 bg-primary-500/20 rounded-full blur-[100px] animate-pulse" />
                 <div className="absolute bottom-20 right-20 w-96 h-96 bg-violet-500/20 rounded-full blur-[120px] animate-float" />
                 <div className="absolute top-1/2 left-1/2 w-48 h-48 bg-primary-400/10 rounded-full blur-[80px]" />
@@ -86,31 +129,14 @@ export default function LoginPage() {
                     <p className="text-primary-100/70 text-lg mb-10 leading-relaxed font-medium">
                         Enterprise-grade platform built for scale, performance, and extraordinary learning experiences.
                     </p>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        {[
-                            { label: 'Courses', value: '12k+' },
-                            { label: 'Learners', value: '485k+' },
-                            { label: 'Instructors', value: '1.2k+' },
-                            { label: 'Certificates', value: '98k+' },
-                        ].map((s, i) => (
-                            <div key={s.label} className={`bg-white/5 rounded-2xl p-5 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-colors cursor-default group`}>
-                                <div className="text-2xl font-black group-hover:scale-110 transition-transform origin-left">{s.value}</div>
-                                <div className="text-primary-200/60 text-[10px] uppercase font-black tracking-widest">{s.label}</div>
-                            </div>
-                        ))}
-                    </div>
                 </div>
             </div>
 
-            {/* Right Auth Panel */}
             <div className="flex-1 flex items-center justify-center p-6 lg:p-12 relative">
-                {/* Decorative background element for mobile */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-primary-500/5 rounded-full blur-3xl lg:hidden" />
                 <div className="absolute bottom-0 left-0 w-64 h-64 bg-violet-500/5 rounded-full blur-3xl lg:hidden" />
 
                 <div className="w-full max-w-md space-y-8 relative z-10">
-                    {/* Brand header */}
                     <div className="text-center space-y-2">
                         <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-[2rem] shadow-primary-glow mb-4">
                             <HiAcademicCap className="w-8 h-8 text-white" />
@@ -119,22 +145,9 @@ export default function LoginPage() {
                         <p className="text-slate-500 font-medium tracking-tight">Sign in with your credentials to continue</p>
                     </div>
 
-                    {/* Role Quick Selector: Animated Toggle */}
-                    <div className="bg-slate-50 p-1.5 rounded-2xl border border-slate-200 flex relative overflow-hidden group">
-                        <div className="absolute inset-0 bg-primary-50/50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                        {['learner', 'instructor', 'admin'].map((role) => (
-                            <button
-                                key={role}
-                                onClick={() => handleDemoLogin(role)}
-                                className="flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all relative z-10 text-slate-400 hover:text-slate-600"
-                            >
-                                {role}
-                            </button>
-                        ))}
-                        {/* Note: In a real app, I'd add a sliding background div fixed to the active role */}
-                    </div>
-
                     <form onSubmit={handleSubmit} className={`space-y-5 ${Object.keys(errors).length ? 'animate-shake' : ''}`}>
+                        {errors.general && <p className="text-sm text-red-600">{errors.general}</p>}
+
                         <div className="space-y-4">
                             <Input
                                 label="Work Email"
@@ -184,6 +197,22 @@ export default function LoginPage() {
                         </Button>
                     </form>
 
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                            <div className="h-px flex-1 bg-slate-200" />
+                            <span className="text-xs uppercase font-bold text-slate-400 tracking-widest">or</span>
+                            <div className="h-px flex-1 bg-slate-200" />
+                        </div>
+
+                        <div className="flex justify-center">
+                            <GoogleLogin
+                                onSuccess={handleGoogleSuccess}
+                                onError={() => toast.error('Google sign-in failed')}
+                                useOneTap={false}
+                            />
+                        </div>
+                    </div>
+
                     <div className="text-center pt-4">
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                             New to the platform?{' '}
@@ -195,4 +224,3 @@ export default function LoginPage() {
         </div>
     );
 }
-

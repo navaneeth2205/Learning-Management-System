@@ -15,6 +15,7 @@ import LoginPage from './pages/auth/LoginPage';
 import SignupPage from './pages/auth/SignupPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import OtpVerifyPage from './pages/auth/OtpVerifyPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 
 // Learner Pages
 import LearnerDashboard from './pages/learner/LearnerDashboard';
@@ -65,6 +66,7 @@ export default function AppRouter() {
             <Route path={ROUTES.LOGIN} element={<LoginPage />} />
             <Route path={ROUTES.SIGNUP} element={<SignupPage />} />
             <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />
+            <Route path={ROUTES.RESET_PASSWORD} element={<ResetPasswordPage />} />
             <Route path={ROUTES.OTP_VERIFY} element={<OtpVerifyPage />} />
 
             {/* Learner Routes */}

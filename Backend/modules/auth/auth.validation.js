@@ -18,6 +18,36 @@ export const loginValidation = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
+export const verifyOtpValidation = [
+  body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
+  body('otp')
+    .matches(/^\d{6}$/)
+    .withMessage('OTP must be a 6-digit code'),
+];
+
+export const resendOtpValidation = [
+  body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
+];
+
+export const googleLoginValidation = [
+  body('idToken').notEmpty().withMessage('Google idToken is required'),
+  body('role')
+    .optional()
+    .isIn([ROLES.INSTRUCTOR, ROLES.LEARNER])
+    .withMessage('Role must be instructor or learner'),
+];
+
+export const forgotPasswordValidation = [
+  body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
+];
+
+export const resetPasswordValidation = [
+  body('token').trim().notEmpty().withMessage('Reset token is required'),
+  body('password')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters long'),
+];
+
 export const validateRequest = (req, res, next) => {
   const errors = validationResult(req);
 

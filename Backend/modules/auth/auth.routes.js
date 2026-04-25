@@ -1,7 +1,16 @@
 import express from 'express';
 
-import { login, register } from './auth.controller.js';
-import { loginValidation, registerValidation, validateRequest } from './auth.validation.js';
+import { confirmPasswordReset, googleLogin, login, register, requestPasswordReset, resendOtp, verifyOtp } from './auth.controller.js';
+import {
+	forgotPasswordValidation,
+	googleLoginValidation,
+	loginValidation,
+	registerValidation,
+	resetPasswordValidation,
+	resendOtpValidation,
+	validateRequest,
+	verifyOtpValidation,
+} from './auth.validation.js';
 
 const router = express.Router();
 
@@ -11,7 +20,12 @@ router.get('/', (req, res) => {
 		message: 'Auth API is active',
 		endpoints: {
 			register: 'POST /api/auth/register',
+			verifyOtp: 'POST /api/auth/verify-otp',
+			resendOtp: 'POST /api/auth/resend-otp',
 			login: 'POST /api/auth/login',
+			google: 'POST /api/auth/google',
+			forgotPassword: 'POST /api/auth/forgot-password',
+			resetPassword: 'POST /api/auth/reset-password',
 		},
 	});
 });
@@ -31,6 +45,11 @@ router.get('/login', (req, res) => {
 });
 
 router.post('/register', registerValidation, validateRequest, register);
+router.post('/verify-otp', verifyOtpValidation, validateRequest, verifyOtp);
+router.post('/resend-otp', resendOtpValidation, validateRequest, resendOtp);
 router.post('/login', loginValidation, validateRequest, login);
+router.post('/google', googleLoginValidation, validateRequest, googleLogin);
+router.post('/forgot-password', forgotPasswordValidation, validateRequest, requestPasswordReset);
+router.post('/reset-password', resetPasswordValidation, validateRequest, confirmPasswordReset);
 
 export default router;

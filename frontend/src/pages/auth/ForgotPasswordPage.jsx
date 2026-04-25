@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { HiAcademicCap, HiMail, HiArrowLeft } from 'react-icons/hi';
+import { forgotPasswordApi } from '../../features/auth/authApi';
 import { ROUTES } from '../../constants/routes';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -11,12 +13,24 @@ export default function ForgotPasswordPage() {
     const [sent, setSent] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!email) { setError('Email is required'); return; }
         if (!/\S+@\S+\.\S+/.test(email)) { setError('Enter a valid email'); return; }
+
+        setError('');
         setLoading(true);
-        setTimeout(() => { setSent(true); setLoading(false); }, 1200);
+
+        try {
+            await forgotPasswordApi({ email: email.trim() });
+            setSent(true);
+            toast.success('Reset link sent if your account exists');
+        } catch (requestError) {
+            setError(requestError.message || 'Unable to send reset link');
+            toast.error(requestError.message || 'Unable to send reset link');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (

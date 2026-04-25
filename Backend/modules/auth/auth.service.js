@@ -1,30 +1,23 @@
+import crypto from 'crypto';
+
+import { OAuth2Client } from 'google-auth-library';
+import nodemailer from 'nodemailer';
+
 import User from './auth.model.js';
 
-import { comparePassword, hashPassword } from '../../utils/hashPassword.js';
-import generateToken from '../../utils/generateToken.js';
+import { env } from '../../config/env.js';
 import { ROLES, createAppError } from '../../utils/constants.js';
+import generateToken from '../../utils/generateToken.js';
+import { comparePassword, hashPassword } from '../../utils/hashPassword.js';
 
 const allowedRegisterRoles = [ROLES.INSTRUCTOR, ROLES.LEARNER];
+const otpExpiryMinutes = 10;
 
-export const registerUser = async ({ name, email, password, role }) => {
-	if (!allowedRegisterRoles.includes(role)) {
-		throw createAppError('Role must be either instructor or learner', 400);
-	}
+const googleClient = env.googleClientId ? new OAuth2Client(env.googleClientId) : null;
 
-	const existingUser = await User.findOne({ email });
-	if (existingUser) {
-		throw createAppError('User already exists with this email', 409);
-	}
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
-	const hashedPassword = await hashPassword(password);
-
-	const user = await User.create({
-		name,
-		email,
-		password: hashedPassword,
-		role,
-	});
-
+const buildAuthPayload = (user) => {
 	const token = generateToken({ userId: user._id, role: user.role });
 
 	return {
@@ -39,10 +32,198 @@ export const registerUser = async ({ name, email, password, role }) => {
 	};
 };
 
-export const loginUser = async ({ email, password }) => {
-	const user = await User.findOne({ email }).select('+password');
+const generateOtp = () => `${Math.floor(100000 + Math.random() * 900000)}`;
+
+const hashOtp = (otp) => crypto.createHash('sha256').update(otp).digest('hex');
+
+const createOtpFields = (otp) => ({
+	otpCodeHash: hashOtp(otp),
+	otpExpiresAt: new Date(Date.now() + otpExpiryMinutes * 60 * 1000),
+});
+
+const getMailerTransporter = () => {
+	if (!env.emailHost || !env.emailHostUser || !env.emailHostPassword) {
+		throw createAppError('Email service is not configured on the server', 500);
+	}
+
+	return nodemailer.createTransport({
+		host: env.emailHost,
+		port: env.emailPort,
+		secure: false,
+		requireTLS: env.emailUseTls,
+		tls: {
+			rejectUnauthorized: !env.emailAllowSelfSigned,
+		},
+		auth: {
+			user: env.emailHostUser,
+			pass: env.emailHostPassword,
+		},
+	});
+};
+
+const sendRegistrationOtpEmail = async ({ email, name, otp }) => {
+	const transporter = getMailerTransporter();
+
+	await transporter.sendMail({
+		from: env.defaultFromEmail,
+		to: email,
+		subject: 'EduVerse verification code',
+		text: `Hello ${name}, your EduVerse verification code is ${otp}. It will expire in ${otpExpiryMinutes} minutes.`,
+		html: `
+			<div style="font-family: Arial, sans-serif; line-height:1.5; color:#111827;">
+				<h2 style="margin-bottom:8px;">Verify your EduVerse account</h2>
+				<p>Hello ${name},</p>
+				<p>Your verification code is:</p>
+				<div style="font-size:28px; font-weight:700; letter-spacing:6px; margin:16px 0; color:#4f46e5;">${otp}</div>
+				<p>This code expires in ${otpExpiryMinutes} minutes.</p>
+			</div>
+		`,
+	});
+};
+
+const sendResetPasswordEmail = async ({ email, name, resetToken }) => {
+	const transporter = getMailerTransporter();
+	const clientBaseUrl = env.clientUrl === '*' ? 'http://127.0.0.1:5173' : env.clientUrl;
+	const resetUrl = `${clientBaseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+	await transporter.sendMail({
+		from: env.defaultFromEmail,
+		to: email,
+		subject: 'EduVerse password reset',
+		text: `Hello ${name}, reset your password using this link: ${resetUrl}. The link expires in ${env.resetPasswordExpiresMinutes} minutes.`,
+		html: `
+			<div style="font-family: Arial, sans-serif; line-height:1.5; color:#111827;">
+				<h2 style="margin-bottom:8px;">Reset your EduVerse password</h2>
+				<p>Hello ${name},</p>
+				<p>Click the button below to reset your password. This link expires in ${env.resetPasswordExpiresMinutes} minutes.</p>
+				<p style="margin:24px 0;">
+					<a href="${resetUrl}" style="background:#4f46e5;color:white;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Reset password</a>
+				</p>
+				<p>If you did not request this, you can ignore this email.</p>
+			</div>
+		`,
+	});
+};
+
+export const registerUser = async ({ name, email, password, role }) => {
+	if (!allowedRegisterRoles.includes(role)) {
+		throw createAppError('Role must be either instructor or learner', 400);
+	}
+
+	const normalizedEmail = normalizeEmail(email);
+	const existingUser = await User.findOne({ email: normalizedEmail }).select('+password +otpCodeHash +otpExpiresAt');
+
+	const otp = generateOtp();
+	const otpFields = createOtpFields(otp);
+	const hashedPassword = await hashPassword(password);
+
+	if (existingUser && existingUser.isEmailVerified) {
+		throw createAppError('User already exists with this email', 409);
+	}
+
+	if (existingUser && existingUser.googleId && !existingUser.password) {
+		throw createAppError('This email is already registered with Google sign-in', 409);
+	}
+
+	let user;
+	if (existingUser) {
+		existingUser.name = name;
+		existingUser.password = hashedPassword;
+		existingUser.role = role;
+		existingUser.isEmailVerified = false;
+		existingUser.otpCodeHash = otpFields.otpCodeHash;
+		existingUser.otpExpiresAt = otpFields.otpExpiresAt;
+		user = await existingUser.save();
+	} else {
+		user = await User.create({
+			name,
+			email: normalizedEmail,
+			password: hashedPassword,
+			role,
+			isEmailVerified: false,
+			...otpFields,
+		});
+	}
+
+	await sendRegistrationOtpEmail({ email: user.email, name: user.name, otp });
+
+	return {
+		email: user.email,
+		requiresOtp: true,
+		otpExpiresInMinutes: otpExpiryMinutes,
+	};
+};
+
+export const verifyRegistrationOtp = async ({ email, otp }) => {
+	const normalizedEmail = normalizeEmail(email);
+	const user = await User.findOne({ email: normalizedEmail }).select('+otpCodeHash +otpExpiresAt');
+
 	if (!user) {
+		throw createAppError('User not found for this email', 404);
+	}
+
+	if (user.isEmailVerified) {
+		return buildAuthPayload(user);
+	}
+
+	if (!user.otpCodeHash || !user.otpExpiresAt) {
+		throw createAppError('No active OTP found. Please request a new code', 400);
+	}
+
+	if (user.otpExpiresAt.getTime() < Date.now()) {
+		throw createAppError('OTP has expired. Please request a new code', 410);
+	}
+
+	if (hashOtp(String(otp)) !== user.otpCodeHash) {
+		throw createAppError('Invalid OTP code', 400);
+	}
+
+	user.isEmailVerified = true;
+	user.otpCodeHash = undefined;
+	user.otpExpiresAt = undefined;
+	await user.save();
+
+	return buildAuthPayload(user);
+};
+
+export const resendRegistrationOtp = async ({ email }) => {
+	const normalizedEmail = normalizeEmail(email);
+	const user = await User.findOne({ email: normalizedEmail }).select('+otpCodeHash +otpExpiresAt');
+
+	if (!user) {
+		throw createAppError('User not found for this email', 404);
+	}
+
+	if (user.isEmailVerified) {
+		throw createAppError('Email is already verified. Please login', 400);
+	}
+
+	const otp = generateOtp();
+	const otpFields = createOtpFields(otp);
+
+	user.otpCodeHash = otpFields.otpCodeHash;
+	user.otpExpiresAt = otpFields.otpExpiresAt;
+	await user.save();
+
+	await sendRegistrationOtpEmail({ email: user.email, name: user.name, otp });
+
+	return {
+		email: user.email,
+		requiresOtp: true,
+		otpExpiresInMinutes: otpExpiryMinutes,
+	};
+};
+
+export const loginUser = async ({ email, password }) => {
+	const normalizedEmail = normalizeEmail(email);
+	const user = await User.findOne({ email: normalizedEmail }).select('+password');
+
+	if (!user || !user.password) {
 		throw createAppError('Invalid email or password', 401);
+	}
+
+	if (user.isEmailVerified === false) {
+		throw createAppError('Please verify your email with OTP before login', 403);
 	}
 
 	const isPasswordValid = await comparePassword(password, user.password);
@@ -50,16 +231,104 @@ export const loginUser = async ({ email, password }) => {
 		throw createAppError('Invalid email or password', 401);
 	}
 
-	const token = generateToken({ userId: user._id, role: user.role });
+	return buildAuthPayload(user);
+};
 
-	return {
-		token,
-		user: {
-			id: user._id,
-			name: user.name,
-			email: user.email,
-			role: user.role,
-			createdAt: user.createdAt,
-		},
-	};
+export const loginWithGoogle = async ({ idToken, role }) => {
+	if (!env.googleClientId || !googleClient) {
+		throw createAppError('Google login is not configured on the server', 500);
+	}
+
+	let verifiedTicket;
+	try {
+		verifiedTicket = await googleClient.verifyIdToken({
+			idToken,
+			audience: env.googleClientId,
+		});
+	} catch {
+		throw createAppError('Invalid Google token', 401);
+	}
+
+	const payload = verifiedTicket.getPayload();
+	if (!payload?.email || !payload?.sub) {
+		throw createAppError('Invalid Google token payload', 401);
+	}
+
+	if (!payload.email_verified) {
+		throw createAppError('Google account email is not verified', 401);
+	}
+
+	const normalizedEmail = normalizeEmail(payload.email);
+	const requestedRole = allowedRegisterRoles.includes(role) ? role : ROLES.LEARNER;
+	let user = await User.findOne({ email: normalizedEmail });
+
+	if (!user) {
+		user = await User.create({
+			name: payload.name || 'Google User',
+			email: normalizedEmail,
+			role: requestedRole,
+			googleId: payload.sub,
+			isEmailVerified: true,
+		});
+		return buildAuthPayload(user);
+	}
+
+	if (user.googleId && user.googleId !== payload.sub) {
+		throw createAppError('Google account mismatch for this email', 409);
+	}
+
+	if (!user.googleId) {
+		user.googleId = payload.sub;
+	}
+
+	if (user.isEmailVerified === false) {
+		user.isEmailVerified = true;
+	}
+
+	await user.save();
+	return buildAuthPayload(user);
+};
+
+export const forgotPassword = async ({ email }) => {
+	const normalizedEmail = normalizeEmail(email);
+	const user = await User.findOne({ email: normalizedEmail }).select('+resetPasswordTokenHash +resetPasswordExpiresAt');
+
+	if (!user) {
+		return { email: normalizedEmail, sent: true };
+	}
+
+	const resetToken = crypto.randomBytes(32).toString('hex');
+	const resetTokenHash = hashOtp(resetToken);
+
+	user.resetPasswordTokenHash = resetTokenHash;
+	user.resetPasswordExpiresAt = new Date(Date.now() + env.resetPasswordExpiresMinutes * 60 * 1000);
+	await user.save();
+
+	await sendResetPasswordEmail({
+		email: user.email,
+		name: user.name,
+		resetToken,
+	});
+
+	return { email: user.email, sent: true };
+};
+
+export const resetPassword = async ({ token, password }) => {
+	const tokenHash = hashOtp(String(token));
+	const user = await User.findOne({
+		resetPasswordTokenHash: tokenHash,
+		resetPasswordExpiresAt: { $gt: new Date() },
+	}).select('+password +resetPasswordTokenHash +resetPasswordExpiresAt');
+
+	if (!user) {
+		throw createAppError('Reset token is invalid or expired', 400);
+	}
+
+	user.password = await hashPassword(password);
+	user.resetPasswordTokenHash = undefined;
+	user.resetPasswordExpiresAt = undefined;
+	user.isEmailVerified = true;
+	await user.save();
+
+	return buildAuthPayload(user);
 };

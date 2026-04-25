@@ -1,8 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
+import { GoogleLogin } from '@react-oauth/google';
+import toast from 'react-hot-toast';
 import { HiAcademicCap, HiMail, HiLockClosed, HiUser, HiEye, HiEyeOff } from 'react-icons/hi';
 import { ROUTES } from '../../constants/routes';
 import { ROLES } from '../../constants/roles';
+import { googleLoginApi, registerApi } from '../../features/auth/authApi';
+import { loginSuccess, setPendingVerificationEmail } from '../../features/auth/authSlice';
+import { setAuthToken } from '../../services/api';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import clsx from 'clsx';
@@ -12,12 +18,19 @@ export default function SignupPage() {
     const [showPass, setShowPass] = useState(false);
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
+    const dispatch = useDispatch();
     const navigate = useNavigate();
 
     const roles = [
         { value: ROLES.LEARNER, label: 'Learner', desc: 'Access courses and track your progress' },
         { value: ROLES.INSTRUCTOR, label: 'Instructor', desc: 'Create and manage courses' },
     ];
+
+    const roleDashboards = {
+        [ROLES.LEARNER]: ROUTES.LEARNER_DASHBOARD,
+        [ROLES.INSTRUCTOR]: ROUTES.INSTRUCTOR_DASHBOARD,
+        [ROLES.ADMIN]: ROUTES.ADMIN_DASHBOARD,
+    };
 
     const validate = () => {
         const errs = {};
@@ -29,12 +42,65 @@ export default function SignupPage() {
         return errs;
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         const errs = validate();
         if (Object.keys(errs).length) { setErrors(errs); return; }
+
+        setErrors({});
         setLoading(true);
-        setTimeout(() => { navigate(ROUTES.OTP_VERIFY); setLoading(false); }, 1200);
+
+        try {
+            const data = await registerApi({
+                name: form.name.trim(),
+                email: form.email.trim(),
+                password: form.password,
+                role: form.role,
+            });
+
+            dispatch(setPendingVerificationEmail(data?.email || form.email.trim()));
+            toast.success('OTP sent to your email. Please verify your account.');
+            navigate(ROUTES.OTP_VERIFY, {
+                state: {
+                    email: data?.email || form.email.trim(),
+                },
+            });
+        } catch (error) {
+            setErrors({ general: error.message || 'Registration failed' });
+            toast.error(error.message || 'Registration failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleGoogleSuccess = async (credentialResponse) => {
+        const idToken = credentialResponse?.credential;
+
+        if (!idToken) {
+            toast.error('Google sign-up did not return a token');
+            return;
+        }
+
+        setLoading(true);
+        setErrors({});
+
+        try {
+            const data = await googleLoginApi({
+                idToken,
+                role: form.role,
+            });
+
+            setAuthToken(data.token);
+            dispatch(loginSuccess(data));
+            const targetPath = roleDashboards[data?.user?.role] || ROUTES.LEARNER_DASHBOARD;
+            toast.success('Signed up with Google successfully');
+            navigate(targetPath, { replace: true });
+        } catch (error) {
+            setErrors({ general: error.message || 'Google sign-up failed' });
+            toast.error(error.message || 'Google sign-up failed');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -75,6 +141,7 @@ export default function SignupPage() {
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
+                        {errors.general && <p className="text-sm text-red-600">{errors.general}</p>}
                         <Input label="Full name" placeholder="John Doe" value={form.name}
                             onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                             icon={<HiUser className="w-4 h-4" />} error={errors.name} required />
@@ -101,6 +168,22 @@ export default function SignupPage() {
                         </p>
                         <Button type="submit" fullWidth loading={loading} size="lg">Create Account</Button>
                     </form>
+
+                    <div className="space-y-3 mt-5">
+                        <div className="flex items-center gap-3">
+                            <div className="h-px flex-1 bg-slate-200" />
+                            <span className="text-xs uppercase font-bold text-slate-400 tracking-widest">or</span>
+                            <div className="h-px flex-1 bg-slate-200" />
+                        </div>
+
+                        <div className="flex justify-center">
+                            <GoogleLogin
+                                onSuccess={handleGoogleSuccess}
+                                onError={() => toast.error('Google sign-up failed')}
+                                useOneTap={false}
+                            />
+                        </div>
+                    </div>
 
                     <p className="text-center text-sm text-text-secondary mt-5">
                         Already have an account?{' '}
