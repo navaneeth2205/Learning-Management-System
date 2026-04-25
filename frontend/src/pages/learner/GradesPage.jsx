@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
     HiTrendingUp, HiAcademicCap, HiStar, HiClock,
     HiDownload, HiSearch, HiFilter
@@ -9,15 +10,52 @@ import {
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import SearchBar from '../../components/ui/SearchBar';
+import { fetchGrades } from '../../services/learnerApi';
 
 export default function GradesPage() {
-    const grades = [
+    const mockGrades = [
         { id: 1, title: 'React Hooks Deep Dive', type: 'Assignment', course: 'Advanced React Patterns', score: 95, grade: 'A+', date: '2023-10-12' },
         { id: 2, title: 'ES6+ Foundations', type: 'Quiz', course: 'Advanced React Patterns', score: 88, grade: 'A', date: '2023-10-05' },
         { id: 3, title: 'Atomic Design Principles', type: 'Assignment', course: 'UI/UX Design Masterclass', score: 92, grade: 'A', date: '2023-09-28' },
         { id: 4, title: 'Color Theory Quiz', type: 'Quiz', course: 'UI/UX Design Masterclass', score: 75, grade: 'C+', date: '2023-09-20' },
         { id: 5, title: 'Flexbox & Grid Mastery', type: 'Assignment', course: 'CSS Architecture', score: 100, grade: 'A+', date: '2023-09-15' },
     ];
+    const [grades, setGrades] = useState(mockGrades);
+
+    useEffect(() => {
+        fetchGrades()
+            .then(data => {
+                if (data) {
+                    const liveGrades = [];
+                    (data.quizGrades || []).forEach(q => {
+                        liveGrades.push({
+                            id: q._id,
+                            title: q.quizTitle,
+                            type: 'Quiz',
+                            course: q.courseTitle,
+                            score: q.percentage,
+                            grade: q.percentage >= 90 ? 'A+' : q.percentage >= 80 ? 'A' : q.percentage >= 70 ? 'B+' : q.percentage >= 60 ? 'B' : 'C',
+                            date: q.completedAt ? new Date(q.completedAt).toISOString().split('T')[0] : '',
+                        });
+                    });
+                    (data.assignmentGrades || []).forEach(a => {
+                        liveGrades.push({
+                            id: a._id,
+                            title: a.assignmentTitle,
+                            type: 'Assignment',
+                            course: a.courseTitle,
+                            score: a.percentage,
+                            grade: a.percentage >= 90 ? 'A+' : a.percentage >= 80 ? 'A' : a.percentage >= 70 ? 'B+' : a.percentage >= 60 ? 'B' : 'C',
+                            date: '',
+                        });
+                    });
+                    if (liveGrades.length > 0) {
+                        setGrades(prev => [...liveGrades, ...prev]);
+                    }
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     const chartData = [
         { name: 'Sep 1', score: 80 },

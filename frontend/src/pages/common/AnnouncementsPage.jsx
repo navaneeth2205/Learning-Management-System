@@ -11,6 +11,7 @@ import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import clsx from 'clsx';
 import { useRef, useEffect } from 'react';
+import { fetchAnnouncements, createAnnouncementAPI } from '../../services/learnerApi';
 
 /* ─── Font settings ────────────────────────────────────────── */
 const sora = { fontFamily: "'Sora', sans-serif" };
@@ -62,6 +63,25 @@ export default function AnnouncementsPage() {
     const [announcements, setAnnouncements] = useState(INITIAL_ANNOUNCEMENTS);
     const [selectedDetail, setSelectedDetail] = useState(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+    useEffect(() => {
+        fetchAnnouncements()
+            .then(data => {
+                if (data && data.length > 0) {
+                    const mapped = data.map(a => ({
+                        id: a._id,
+                        title: a.title,
+                        content: a.content || a.message || '',
+                        category: a.type || 'System',
+                        date: a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
+                        priority: a.priority || 'normal',
+                        author: a.createdBy?.name || 'Admin'
+                    }));
+                    setAnnouncements(prev => [...mapped, ...prev]);
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     const handleCreateAnnouncement = (newAnnouncement) => {
         setAnnouncements([{ ...newAnnouncement, id: Date.now() }, ...announcements]);

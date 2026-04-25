@@ -37,3 +37,11 @@ export const assignGrade = async ({ submissionId, grade }) => {
 
 export const getSubmissionsByAssignment = async (assignmentId) =>
 	Submission.find({ assignmentId }).populate('userId', 'name email').sort({ _id: -1 });
+
+export const getSubmissionsByUser = async (userId) =>
+	Submission.find({ userId })
+		.populate('assignmentId', 'title courseId deadline points')
+		.sort({ _id: -1 });
+
+export const getSubmissionByUserAndAssignment = async (userId, assignmentId) =>
+	Submission.findOne({ userId, assignmentId });

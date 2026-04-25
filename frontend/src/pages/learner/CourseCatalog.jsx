@@ -13,13 +13,20 @@ import SearchBar from '../../components/ui/SearchBar';
 import Select from '../../components/ui/Select';
 import Pagination from '../../components/ui/Pagination';
 import Badge from '../../components/ui/Badge';
+import { fetchCourses, enrollInCourse, checkEnrollment } from '../../services/learnerApi';
+import toast from 'react-hot-toast';
+import { useSelector } from 'react-redux';
 
 export default function CourseCatalog() {
     const location = useLocation();
+    const { token } = useSelector(s => s.auth);
     const [search, setSearch] = useState('');
     const [category, setCategory] = useState('All');
     const [difficulty, setDifficulty] = useState('All');
     const [page, setPage] = useState(1);
+    const [liveCourses, setLiveCourses] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [enrollingId, setEnrollingId] = useState(null);
 
     useEffect(() => {
         const queryParams = new URLSearchParams(location.search);
@@ -29,7 +36,48 @@ export default function CourseCatalog() {
         }
     }, [location.search]);
 
-    const categories = ['All', 'Web Development', 'Data Science', 'Design', 'Cloud', 'Business'];
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const params = {};
+                if (category !== 'All') params.category = category;
+                if (difficulty !== 'All') params.difficulty = difficulty;
+                if (search) params.search = search;
+                const data = await fetchCourses(params);
+                setLiveCourses(data);
+            } catch {
+                // fallback to mock
+                setLiveCourses([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+        load();
+    }, [category, difficulty, search]);
+
+    // Merge live and mock courses
+    const allCourses = useMemo(() => {
+        if (liveCourses.length > 0) {
+            return liveCourses.map(c => ({
+                id: c._id,
+                title: c.title,
+                description: c.description,
+                instructorName: c.instructorId?.name || 'Instructor',
+                category: c.category || 'General',
+                difficulty: c.difficulty || 'Beginner',
+                duration: c.duration || '',
+                thumbnail: c.thumbnail,
+                enrolled: c.enrolledCount || 0,
+                rating: c.rating || 0,
+                tags: c.tags || [],
+                status: c.status,
+                _id: c._id,
+            }));
+        }
+        return mockCourses;
+    }, [liveCourses]);
+
+    const categories = ['All', 'Web Development', 'Data Science', 'Design', 'Cloud', 'Business', 'General'];
     const difficultyOptions = [
         { label: 'All Levels', value: 'All' },
         { label: 'Beginner', value: DIFFICULTY.BEGINNER },
@@ -37,19 +85,37 @@ export default function CourseCatalog() {
         { label: 'Advanced', value: DIFFICULTY.ADVANCED },
     ];
 
+    // Client-side filter for mock data only
     const filteredCourses = useMemo(() => {
-        return mockCourses.filter(course => {
+        if (liveCourses.length > 0) return allCourses;
+        return allCourses.filter(course => {
             const matchesSearch = course.title.toLowerCase().includes(search.toLowerCase()) ||
                 course.description.toLowerCase().includes(search.toLowerCase());
             const matchesCategory = category === 'All' || course.category === category;
             const matchesDifficulty = difficulty === 'All' || course.difficulty === difficulty;
             return matchesSearch && matchesCategory && matchesDifficulty;
         });
-    }, [search, category, difficulty]);
+    }, [allCourses, search, category, difficulty, liveCourses]);
 
     const itemsPerPage = 8;
     const totalPages = Math.ceil(filteredCourses.length / itemsPerPage);
     const displayedCourses = filteredCourses.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+    const handleEnroll = async (courseId) => {
+        if (!token) {
+            toast.error('Please login to enroll');
+            return;
+        }
+        try {
+            setEnrollingId(courseId);
+            await enrollInCourse(courseId);
+            toast.success('Enrolled successfully!');
+        } catch (err) {
+            toast.error(err.message || 'Failed to enroll');
+        } finally {
+            setEnrollingId(null);
+        }
+    };
 
     return (
         <div className="p-6 space-y-8 max-w-7xl mx-auto pb-20">
@@ -99,11 +165,19 @@ export default function CourseCatalog() {
                 </div>
             </div>
 
+            {/* Loading */}
+            {loading && (
+                <div className="py-20 text-center">
+                    <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-gray-500 font-medium">Loading courses...</p>
+                </div>
+            )}
+
             {/* Grid */}
-            {displayedCourses.length > 0 ? (
+            {!loading && displayedCourses.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {displayedCourses.map(course => (
-                        <div key={course.id} className="bg-white rounded-xl border border-gray-200 shadow-md hover-lift group flex flex-col transition-all duration-300">
+                        <div key={course.id || course._id} className="bg-white rounded-xl border border-gray-200 shadow-md hover-lift group flex flex-col transition-all duration-300">
                             {/* Premium Thumbnail */}
                             <div className="relative h-32 overflow-hidden rounded-t-xl mb-3">
                                 <img
@@ -123,7 +197,7 @@ export default function CourseCatalog() {
                             <div className="flex flex-col flex-1 p-4 pt-1">
                                 <div className="flex items-center gap-2 mb-2">
                                     <div className="w-4 h-4 bg-primary-100 rounded-full flex items-center justify-center text-[7px] font-bold text-primary-500">
-                                        {course.instructorName.split(' ')[1]?.[0] || 'T'}
+                                        {course.instructorName?.split(' ')?.[1]?.[0] || 'T'}
                                     </div>
                                     <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{course.instructorName}</span>
                                 </div>
@@ -136,26 +210,37 @@ export default function CourseCatalog() {
                                 <div className="flex items-center justify-between mb-4 pt-3 border-t border-slate-100/50">
                                     <div className="flex items-center gap-1 text-gray-500 font-bold text-[9px] uppercase tracking-wider">
                                         <HiUsers className="w-3.5 h-3.5 text-gray-300" />
-                                        <span>{course.enrolled?.toLocaleString()}</span>
+                                        <span>{course.enrolled?.toLocaleString() || 0}</span>
                                     </div>
                                     <div className="flex items-center gap-1 text-amber-500 font-black text-[9px]">
                                         <HiStar className="w-3.5 h-3.5 fill-current" />
-                                        <span>{course.rating}</span>
+                                        <span>{course.rating || '—'}</span>
                                     </div>
                                 </div>
 
-                                <div className="mt-auto">
-                                    <Link to={ROUTES.LEARNER_LESSON.replace(':courseId', course.id).replace(':lessonId', 1)}>
-                                        <Button fullWidth size="sm" className="py-2 font-black uppercase tracking-widest text-[10px] shadow-md hover:shadow-lg transition-all rounded-lg">
-                                            Start Learning
+                                <div className="mt-auto space-y-2">
+                                    <Link to={`/learner/courses/${course._id || course.id}`}>
+                                        <Button fullWidth size="sm" variant="outline" className="py-2 font-black uppercase tracking-widest text-[10px] rounded-lg">
+                                            View Details
                                         </Button>
                                     </Link>
+                                    <Button
+                                        fullWidth
+                                        size="sm"
+                                        className="py-2 font-black uppercase tracking-widest text-[10px] shadow-md hover:shadow-lg transition-all rounded-lg"
+                                        onClick={() => handleEnroll(course._id || course.id)}
+                                        disabled={enrollingId === (course._id || course.id)}
+                                    >
+                                        {enrollingId === (course._id || course.id) ? 'Enrolling...' : 'Enroll Now'}
+                                    </Button>
                                 </div>
                             </div>
                         </div>
                     ))}
                 </div>
-            ) : (
+            )}
+
+            {!loading && displayedCourses.length === 0 && (
                 <div className="py-20 text-center">
                     <HiFilter className="w-16 h-16 text-gray-200 mx-auto mb-4" />
                     <h3 className="text-xl font-black text-gray-800 mb-2">No Courses Found</h3>

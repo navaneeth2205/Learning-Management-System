@@ -1,13 +1,24 @@
+import { useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { Provider } from 'react-redux';
+import { Provider, useSelector } from 'react-redux';
 import { Toaster } from 'react-hot-toast';
 import store from './store/store';
 import AppRouter from './AppRouter';
+import { setAuthToken } from './services/api';
+
+function AuthTokenSync() {
+  const { token } = useSelector(s => s.auth);
+  useEffect(() => {
+    setAuthToken(token);
+  }, [token]);
+  return null;
+}
 
 function App() {
   return (
     <Provider store={store}>
       <BrowserRouter>
+        <AuthTokenSync />
         <AppRouter />
         <Toaster
           position="top-right"

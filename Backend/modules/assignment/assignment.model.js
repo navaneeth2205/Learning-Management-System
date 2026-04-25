@@ -21,6 +21,15 @@ const assignmentSchema = new mongoose.Schema(
 			type: Date,
 			required: true,
 		},
+		points: {
+			type: Number,
+			default: 100,
+			min: 0,
+		},
+		createdAt: {
+			type: Date,
+			default: Date.now,
+		},
 	},
 	{
 		versionKey: false,

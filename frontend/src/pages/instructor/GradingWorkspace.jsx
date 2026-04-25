@@ -7,18 +7,7 @@ import {
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 
-// Mock Submission Fetcher Fallback
-const fetchMockSubmission = (id) => {
-    return {
-        id,
-        student: { name: 'Unknown Student', email: `student${id}@example.com` },
-        assignment: 'Design Case Study',
-        course: 'UI/UX Design Masterclass',
-        submittedAt: 'Fetched automatically via Fallback',
-        status: 'needs_grading',
-        grade: ''
-    };
-};
+import { fetchSubmissionById, gradeSubmission } from '../../services/instructorApi';
 
 export default function GradingWorkspace() {
     const { id } = useParams();
@@ -36,28 +25,56 @@ export default function GradingWorkspace() {
             setIsLoading(false);
             return;
         }
-        setIsLoading(true);
-        // Simulate fetch delay
-        const timer = setTimeout(() => {
-            if (location.state?.submission) {
-                setSubmission(location.state.submission);
-            } else if (id) {
-                setSubmission(fetchMockSubmission(id));
-            }
-            setIsLoading(false);
-        }, 800);
 
-        return () => clearTimeout(timer);
+        const load = async () => {
+            setIsLoading(true);
+            try {
+                if (location.state?.submission) {
+                    setSubmission(location.state.submission);
+                } else if (id) {
+                    const data = await fetchSubmissionById(id);
+                    if (data) {
+                        setSubmission({
+                            id: data._id || data.id,
+                            student: { 
+                                name: data.studentId?.name || 'Unknown Student', 
+                                email: data.studentId?.email || 'student@example.com' 
+                            },
+                            assignment: data.assignmentId?.title || 'Assignment',
+                            course: data.courseId?.title || 'Course',
+                            submittedAt: data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'N/A',
+                            status: data.status || 'needs_grading',
+                            grade: data.grade,
+                            content: data.content
+                        });
+                        setScore(data.grade || '');
+                        setFeedback(data.feedback || '');
+                    }
+                }
+            } catch (err) {
+                toast.error('Failed to load submission');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        load();
     }, [id, location]);
 
-    const handleFinalizeGrade = () => {
+    const handleFinalizeGrade = async () => {
         setIsSubmitting(true);
-        // Simulate network API delay for submitting grade
-        setTimeout(() => {
-            setIsSubmitting(false);
+        try {
+            await gradeSubmission(submission.id, { 
+                grade: score, 
+                feedback: feedback 
+            });
             toast.success('Grade submitted successfully!');
-            navigate('/instructor/submissions'); // Redirection upon success
-        }, 1000);
+            navigate('/instructor/submissions');
+        } catch (err) {
+            toast.error('Failed to submit grade');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     if (isLoading) {

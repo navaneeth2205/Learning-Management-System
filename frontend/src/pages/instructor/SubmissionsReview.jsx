@@ -12,6 +12,8 @@ import Avatar from '../../components/ui/Avatar';
 import Modal from '../../components/ui/Modal';
 import SearchBar from '../../components/ui/SearchBar';
 import Select from '../../components/ui/Select';
+import { fetchPendingSubmissions } from '../../services/instructorApi';
+import toast from 'react-hot-toast';
 
 export default function SubmissionsReview() {
     const [search, setSearch] = useState('');
@@ -21,7 +23,7 @@ export default function SubmissionsReview() {
     const [editingSubmission, setEditingSubmission] = useState(null);
     const navigate = useNavigate();
 
-    const submissions = [
+    const [submissions, setSubmissions] = useState([
         {
             id: 1,
             student: { name: 'Alex Johnson', email: 'alex@example.com' },
@@ -30,37 +32,32 @@ export default function SubmissionsReview() {
             submittedAt: '2h ago',
             status: 'needs_grading',
             file: 'UX_Case_Study_v1.pdf'
-        },
-        {
-            id: 2,
-            student: { name: 'Sarah Miller', email: 'sarah@example.com' },
-            assignment: 'Design Case Study: FinTech App',
-            course: 'UI/UX Design Masterclass',
-            submittedAt: '5h ago',
-            status: 'graded',
-            grade: 'A+',
-            file: 'Sarah_Case_Study.zip'
-        },
-        {
-            id: 3,
-            student: { name: 'Elijah Wood', email: 'elijah@example.com' },
-            assignment: 'React Hooks Deep Dive',
-            course: 'Advanced React Patterns',
-            submittedAt: 'Yesterday',
-            status: 'needs_grading',
-            file: 'hooks-project.repo'
-        },
-        {
-            id: 4,
-            student: { name: 'Luna Lovegood', email: 'luna@example.com' },
-            assignment: 'React Hooks Deep Dive',
-            course: 'Advanced React Patterns',
-            submittedAt: '3 days ago',
-            status: 'returned',
-            grade: 'B-',
-            file: 'Luna_Hooks_Submission.pdf'
         }
-    ];
+    ]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchPendingSubmissions()
+            .then(data => {
+                if (data && data.length > 0) {
+                    setSubmissions(data.map(s => ({
+                        id: s._id || s.id,
+                        student: { 
+                            name: s.studentId?.name || 'Unknown Student', 
+                            email: s.studentId?.email || 'student@example.com' 
+                        },
+                        assignment: s.assignmentId?.title || 'Assignment',
+                        course: s.courseId?.title || 'Course',
+                        submittedAt: s.createdAt ? new Date(s.createdAt).toLocaleDateString() : 'Today',
+                        status: s.status || 'needs_grading',
+                        grade: s.grade,
+                        file: s.fileUrl || 'attachment.pdf'
+                    })));
+                }
+                setLoading(false);
+            })
+            .catch(() => setLoading(false));
+    }, []);
 
     const filteredSubmissions = submissions.filter(s => {
         const matchesSearch =

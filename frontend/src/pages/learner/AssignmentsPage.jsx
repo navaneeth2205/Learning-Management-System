@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
     HiSearch, HiClock, HiPaperClip,
     HiChevronRight, HiExternalLink, HiCheckCircle,
@@ -10,6 +10,7 @@ import Select from '../../components/ui/Select';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import clsx from 'clsx';
+import { fetchMyAssignments, submitAssignment } from '../../services/learnerApi';
 
 /* ─── Font helpers ─────────────────────────────────────────── */
 const sora = { fontFamily: "'Sora', sans-serif" };
@@ -115,6 +116,36 @@ export default function AssignmentsPage() {
     const [assignments, setAssignments] = useState(INITIAL_ASSIGNMENTS);
     const [selectedFile, setSelectedFile] = useState(null);
     const fileInputRef = useRef(null);
+
+    useEffect(() => {
+        fetchMyAssignments()
+            .then(data => {
+                if (data && data.length > 0) {
+                    const mapped = data.map((a, i) => {
+                        const dueDate = a.deadline ? new Date(a.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+                        const now = new Date();
+                        const deadlineDate = new Date(a.deadline);
+                        const daysLeft = Math.max(0, Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24)));
+                        return {
+                            id: a._id || String(i + 1).padStart(3, '0'),
+                            title: a.title,
+                            course: a.courseId?.title || 'Unknown Course',
+                            desc: a.description || '',
+                            status: a.status === 'graded' ? 'evaluated' : a.status === 'submitted' ? 'submitted' : 'active',
+                            dueDate,
+                            lastActive: daysLeft > 0 ? `${daysLeft}d left` : 'Overdue',
+                            attachments: 0,
+                            files: [],
+                            grade: a.grade != null ? (a.grade >= 90 ? 'A+' : a.grade >= 80 ? 'A' : a.grade >= 70 ? 'B+' : a.grade >= 60 ? 'B' : 'C') : undefined,
+                            deadline: daysLeft > 0 ? `${daysLeft} days left` : 'Overdue',
+                            points: a.points || 100,
+                        };
+                    });
+                    setAssignments(prev => [...mapped, ...prev]);
+                }
+            })
+            .catch(() => { /* keep mock data */ });
+    }, []);
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];

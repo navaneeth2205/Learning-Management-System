@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import SearchBar from '../../components/ui/SearchBar';
 import { mockQuizzes } from '../../mock/mockQuizzes';
+import { fetchInstructorQuizzes, fetchMyAssignments } from '../../services/instructorApi';
 
 const mockAssignments = [
     {
@@ -37,7 +38,47 @@ export default function InstructorQuizzes() {
 
     // Outside click ref for Create Dropdown
     const dropdownRef = useRef(null);
+    const [quizzes, setQuizzes] = useState(mockQuizzes);
+    const [assignments, setAssignments] = useState(mockAssignments);
+    const [loading, setLoading] = useState(true);
+
     useEffect(() => {
+        const load = async () => {
+            try {
+                const [quizData, assignData] = await Promise.all([
+                    fetchInstructorQuizzes(),
+                    fetchMyAssignments()
+                ]);
+
+                if (quizData && quizData.length > 0) {
+                    setQuizzes(quizData.map(q => ({
+                        id: q._id || q.id,
+                        title: q.title,
+                        course: q.courseId?.title || 'Unknown Course',
+                        questions: q.questions || [],
+                        timeLimit: q.duration || 30,
+                        enrolled: q.submissionsCount || 0
+                    })));
+                }
+
+                if (assignData && assignData.length > 0) {
+                    setAssignments(assignData.map(a => ({
+                        id: a._id || a.id,
+                        title: a.title,
+                        course: a.courseId?.title || 'Unknown Course',
+                        dueDate: a.dueDate ? new Date(a.dueDate).toLocaleDateString() : 'N/A',
+                        totalMarks: a.maxScore || 100,
+                        submissions: a.submissionsCount || 0,
+                        status: a.status || 'Active'
+                    })));
+                }
+            } catch (err) {} finally {
+                setLoading(false);
+            }
+        };
+
+        load();
+
         function handleClickOutside(event) {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
                 setCreateDropdownOpen(false);
@@ -47,8 +88,8 @@ export default function InstructorQuizzes() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const filteredQuizzes = mockQuizzes.filter(q => q.title.toLowerCase().includes(search.toLowerCase()));
-    const filteredAssignments = mockAssignments.filter(a => a.title.toLowerCase().includes(search.toLowerCase()));
+    const filteredQuizzes = quizzes.filter(q => q.title.toLowerCase().includes(search.toLowerCase()));
+    const filteredAssignments = assignments.filter(a => a.title.toLowerCase().includes(search.toLowerCase()));
 
     return (
         <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8 bg-slate-50 min-h-screen">

@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { HiFire, HiStar, HiTrendingUp } from 'react-icons/hi';
 import Avatar from '../../components/ui/Avatar';
 import clsx from 'clsx';
 import Badge from '../../components/ui/Badge';
+import { fetchLeaderboard } from '../../services/learnerApi';
 
 export default function LeaderboardPage() {
     const [period, setPeriod] = useState('This Week');
     const [showAll, setShowAll] = useState(false);
 
-    // Generate mock leaderboard entries
-    const fullLeaderboard = Array.from({ length: 50 }, (_, i) => ({
+    // Generate mock leaderboard entries as fallback
+    const mockLeaderboard = Array.from({ length: 50 }, (_, i) => ({
         id: i + 1,
         name: i === 0 ? 'AlexR_21' : i === 1 ? 'LearnWithMira' : i === 2 ? 'CodeJunkie' : i === 17 ? 'Budiarti R' : `Student_${i + 1}`,
         points: Math.max(100, 1500 - (i * 28) + Math.floor(Math.random() * 20)),
@@ -17,6 +18,26 @@ export default function LeaderboardPage() {
         color: ['orange', 'blue', 'purple', 'emerald', 'rose'][i % 5],
         isCurrentUser: i === 17
     }));
+
+    const [fullLeaderboard, setFullLeaderboard] = useState(mockLeaderboard);
+
+    useEffect(() => {
+        fetchLeaderboard()
+            .then(data => {
+                if (data && data.length > 0) {
+                    const mapped = data.map((item, i) => ({
+                        id: i + 1,
+                        name: item.user?.name || 'Unknown',
+                        points: item.totalScore || 0,
+                        days: item.coursesCompleted || 0,
+                        color: ['orange', 'blue', 'purple', 'emerald', 'rose'][i % 5],
+                        isCurrentUser: false,
+                    }));
+                    setFullLeaderboard(mapped);
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     return (
         <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-8 pb-20">

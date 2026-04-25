@@ -18,6 +18,11 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Avatar from '../../components/ui/Avatar';
 import clsx from 'clsx';
+import { 
+    fetchInstructorDashboard, 
+    fetchInstructorStats, 
+    fetchPendingSubmissions 
+} from '../../services/instructorApi';
 
 // Simple CountUp Component
 const CountUp = ({ end, duration = 1000 }) => {
@@ -43,12 +48,47 @@ export default function InstructorDashboard() {
     const { user } = useSelector(s => s.auth);
     const navigate = useNavigate();
 
-    const stats = [
+    const statsItems = [
         { label: 'Total Enrollments', value: 4200, icon: HiUsers, color: 'violet', prefix: '', gradient: 'from-violet-500 to-indigo-600' },
         { label: 'Avg Attendance', value: 92, icon: HiPresentationChartLine, color: 'blue', suffix: '%', gradient: 'from-blue-500 to-cyan-600' },
         { label: 'Pending Assessment', value: mockInstructorStats.pendingGrading, icon: HiClipboardList, color: 'rose', gradient: 'from-rose-500 to-pink-600' },
         { label: 'Student Rating', value: 4.9, icon: HiStar, color: 'amber', isFloat: true, gradient: 'from-amber-400 to-orange-500' },
     ];
+
+    const [stats, setStats] = useState(statsItems);
+    const [submissions, setSubmissions] = useState([
+        { name: 'Alex Rivera', course: 'UI/UX Masterclass', task: 'Design System V1', time: '2h ago' },
+        { name: 'Mila Kunis', course: 'React Fundamentals', task: 'Custom Hooks Ex', time: '5h ago' },
+        { name: 'Dinesh K.', course: 'Node.js Backend', task: 'API Auth Logic', time: '1d ago' },
+    ]);
+
+    useEffect(() => {
+        fetchInstructorStats()
+            .then(data => {
+                if (data) {
+                    setStats([
+                        { ...statsItems[0], value: data.totalEnrollments || 4200 },
+                        { ...statsItems[1], value: data.avgAttendance || 92 },
+                        { ...statsItems[2], value: data.pendingGrading || 0 },
+                        { ...statsItems[3], value: data.avgRating || 4.9 },
+                    ]);
+                }
+            })
+            .catch(() => {});
+
+        fetchPendingSubmissions()
+            .then(data => {
+                if (data && data.length > 0) {
+                    setSubmissions(data.map(s => ({
+                        name: s.studentId?.name || 'Student',
+                        course: s.courseId?.title || 'Course',
+                        task: s.assignmentId?.title || 'Assignment',
+                        time: s.createdAt ? new Date(s.createdAt).toLocaleDateString() : 'Today'
+                    })));
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     const performanceData = [
         { name: 'Course A', completion: 85, dropoff: 15 },
@@ -212,11 +252,7 @@ export default function InstructorDashboard() {
                             <button onClick={() => navigate(ROUTES.INSTRUCTOR_SUBMISSIONS)} className="text-[10px] font-black text-primary-500 uppercase tracking-widest hover:underline">View All Task</button>
                         </div>
                         <div className="space-y-2">
-                            {[
-                                { name: 'Alex Rivera', course: 'UI/UX Masterclass', task: 'Design System V1', time: '2h ago' },
-                                { name: 'Mila Kunis', course: 'React Fundamentals', task: 'Custom Hooks Ex', time: '5h ago' },
-                                { name: 'Dinesh K.', course: 'Node.js Backend', task: 'API Auth Logic', time: '1d ago' },
-                            ].map((sub, i) => (
+                            {submissions.map((sub, i) => (
                                 <div key={i} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-all border border-transparent hover:border-slate-100 group cursor-pointer">
                                     <Avatar name={sub.name} size="sm" className="ring-2 ring-white shadow-sm" />
                                     <div className="flex-1 min-w-0">

@@ -10,6 +10,11 @@ import progressRoutes from '../modules/progress/progress.routes.js';
 import quizRoutes from '../modules/quiz/quiz.routes.js';
 import submissionRoutes from '../modules/submission/submission.routes.js';
 import userRoutes from '../modules/user/user.routes.js';
+import certificateRoutes from '../modules/certificate/certificate.routes.js';
+import communityRoutes from '../modules/community/community.routes.js';
+import messageRoutes from '../modules/message/message.routes.js';
+import announcementRoutes from '../modules/announcement/announcement.routes.js';
+import dashboardRoutes from '../modules/dashboard/dashboard.routes.js';
 
 const router = express.Router();
 
@@ -29,6 +34,11 @@ router.get('/', (req, res) => {
 			'/api/progress',
 			'/api/quizzes',
 			'/api/communication',
+			'/api/certificates',
+			'/api/community',
+			'/api/messages',
+			'/api/announcements',
+			'/api/dashboard',
 		],
 	});
 });
@@ -51,5 +61,10 @@ router.use('/submissions', submissionRoutes);
 router.use('/progress', progressRoutes);
 router.use('/quizzes', quizRoutes);
 router.use('/communication', communicationRoutes);
+router.use('/certificates', certificateRoutes);
+router.use('/community', communityRoutes);
+router.use('/messages', messageRoutes);
+router.use('/announcements', announcementRoutes);
+router.use('/dashboard', dashboardRoutes);
 
 export default router;

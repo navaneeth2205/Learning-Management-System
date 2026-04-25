@@ -1,7 +1,7 @@
 import { successResponse } from '../../utils/responseHandler.js';
 import { createAppError } from '../../utils/constants.js';
 
-import { createLesson, getLessonsByCourse } from './lesson.service.js';
+import { createLesson, getLessonsByCourse, getLessonById } from './lesson.service.js';
 
 export const createLessonController = async (req, res, next) => {
 	try {
@@ -14,6 +14,9 @@ export const createLessonController = async (req, res, next) => {
 			title: req.body.title,
 			fileUrl: `/${req.file.path.replace(/\\/g, '/')}`,
 			mimeType: req.file.mimetype,
+			duration: req.body.duration,
+			order: req.body.order,
+			description: req.body.description,
 		});
 
 		return successResponse(res, {
@@ -32,6 +35,18 @@ export const listLessonsByCourseController = async (req, res, next) => {
 		return successResponse(res, {
 			message: 'Lessons fetched successfully',
 			data: lessons,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const getLessonController = async (req, res, next) => {
+	try {
+		const lesson = await getLessonById(req.params.lessonId);
+		return successResponse(res, {
+			message: 'Lesson fetched successfully',
+			data: lesson,
 		});
 	} catch (error) {
 		return next(error);

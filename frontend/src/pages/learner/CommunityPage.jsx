@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     HiSearch, HiChatAlt2, HiThumbUp, HiChat,
     HiChevronRight, HiPlus, HiFire, HiUserGroup,
@@ -10,6 +10,7 @@ import Avatar from '../../components/ui/Avatar';
 import Button from '../../components/ui/Button';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
+import { fetchDiscussions, createDiscussion } from '../../services/learnerApi';
 
 /* ─── Font helpers ─────────────────────────────────────────── */
 const sora = { fontFamily: "'Sora', sans-serif" };
@@ -88,8 +89,32 @@ export default function CommunityPage() {
     const [newPost, setNewPost] = useState({ title: '', category: 'General', content: '' });
     const [attachedFiles, setAttachedFiles] = useState([]);
     const [attachedLinks, setAttachedLinks] = useState([]);
+    const [allDiscussions, setAllDiscussions] = useState(DISCUSSIONS);
 
-    const filtered = DISCUSSIONS.filter(d => {
+    useEffect(() => {
+        fetchDiscussions()
+            .then(data => {
+                if (data && data.length > 0) {
+                    const mapped = data.map(d => ({
+                        id: d._id,
+                        title: d.title,
+                        author: d.userId?.name || 'Anonymous',
+                        category: d.category || 'General',
+                        snippet: d.content?.substring(0, 120) || '',
+                        content: d.content || '',
+                        tags: d.tags || [],
+                        likes: d.likes || 0,
+                        replies: d.replies?.length || 0,
+                        time: d.createdAt ? new Date(d.createdAt).toLocaleDateString() : '',
+                        isHot: (d.likes || 0) > 10,
+                    }));
+                    setAllDiscussions(prev => [...mapped, ...prev]);
+                }
+            })
+            .catch(() => {});
+    }, []);
+
+    const filtered = allDiscussions.filter(d => {
         const matchesSearch = d.title.toLowerCase().includes(search.toLowerCase()) ||
             d.snippet.toLowerCase().includes(search.toLowerCase()) ||
             d.tags.some(t => t.toLowerCase().includes(search.toLowerCase().replace('#', '')));

@@ -11,24 +11,31 @@ import Input from '../../components/ui/Input';
 import Badge from '../../components/ui/Badge';
 import Select from '../../components/ui/Select';
 import clsx from 'clsx';
+import { createCourse } from '../../services/instructorApi';
+import toast from 'react-hot-toast';
 
 export default function CreateCourse() {
-    const [step, setStep] = useState(1);
-    const navigate = useNavigate();
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const [formData, setFormData] = useState({
-        title: '',
-        category: '',
-        difficulty: '',
-        description: '',
-        thumbnail: null,
-    });
+    const handleSubmit = async () => {
+        setIsSubmitting(true);
+        const toastId = toast.loading('Publishing your course...');
+        try {
+            const payload = new FormData();
+            payload.append('title', formData.title);
+            payload.append('category', formData.category);
+            payload.append('description', formData.description);
+            if (formData.thumbnail) payload.append('thumbnail', formData.thumbnail);
 
-    const steps = [
-        { n: 1, label: 'Basic Info', icon: HiDocumentText },
-        { n: 2, label: 'Curriculum', icon: HiAcademicCap },
-        { n: 3, label: 'Publish Settings', icon: HiCheck },
-    ];
+            await createCourse(payload);
+            toast.success('Course published successfully!', { id: toastId });
+            navigate(ROUTES.INSTRUCTOR_COURSES);
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to publish course', { id: toastId });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     const handleNext = () => setStep(s => Math.min(3, s + 1));
     const handleBack = () => setStep(s => Math.max(1, s - 1));
@@ -78,23 +85,27 @@ export default function CreateCourse() {
                             <Select
                                 label="Category"
                                 placeholder="Select category"
+                                value={formData.category}
+                                onChange={(val) => setFormData({ ...formData, category: val })}
                                 options={[
-                                    { label: 'Web Development', value: 'web' },
-                                    { label: 'Data Science', value: 'ds' },
-                                    { label: 'Design', value: 'design' },
-                                    { label: 'Cloud Computing', value: 'cloud' },
-                                    { label: 'Business', value: 'business' },
-                                    { label: 'Security', value: 'security' }
+                                    { label: 'Web Development', value: 'Web Development' },
+                                    { label: 'Data Science', value: 'Data Science' },
+                                    { label: 'Design', value: 'Design' },
+                                    { label: 'Cloud Computing', value: 'Cloud Computing' },
+                                    { label: 'Business', value: 'Business' },
+                                    { label: 'Security', value: 'Security' }
                                 ]}
                             />
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <Select
                                 label="Difficulty"
+                                value={formData.difficulty}
+                                onChange={(val) => setFormData({ ...formData, difficulty: val })}
                                 options={[
-                                    { label: 'Beginner', value: 'begin' },
-                                    { label: 'Intermediate', value: 'inter' },
-                                    { label: 'Advanced', value: 'adv' }
+                                    { label: 'Beginner', value: 'beginner' },
+                                    { label: 'Intermediate', value: 'intermediate' },
+                                    { label: 'Advanced', value: 'advanced' }
                                 ]}
                             />
                         </div>
@@ -103,15 +114,28 @@ export default function CreateCourse() {
                             <textarea
                                 className="w-full rounded-lg border border-surface-border p-3 text-sm focus:ring-2 focus:ring-violet-500 focus:outline-none min-h-[120px]"
                                 placeholder="Describe what students will learn..."
+                                value={formData.description}
+                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                             />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-text-secondary mb-2">Course Thumbnail</label>
-                            <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-violet-400 transition-colors cursor-pointer group">
+                            <input
+                                type="file"
+                                id="thumbnail-upload"
+                                className="hidden"
+                                onChange={(e) => setFormData({ ...formData, thumbnail: e.target.files[0] })}
+                            />
+                            <label 
+                                htmlFor="thumbnail-upload"
+                                className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-violet-400 transition-colors cursor-pointer group block"
+                            >
                                 <HiUpload className="w-12 h-12 text-slate-300 mx-auto mb-2 group-hover:text-violet-500 transition-colors" />
-                                <p className="text-sm text-text-secondary">Click to upload or drag and drop</p>
+                                <p className="text-sm text-text-secondary">
+                                    {formData.thumbnail ? formData.thumbnail.name : 'Click to upload or drag and drop'}
+                                </p>
                                 <p className="text-xs text-text-muted mt-1">SVG, PNG, JPG or GIF (max. 800x400px)</p>
-                            </div>
+                            </label>
                         </div>
                     </div>
                 )}
@@ -122,32 +146,10 @@ export default function CreateCourse() {
                             <h3 className="font-bold text-text-primary">Curriculum Builder</h3>
                             <Button size="sm" variant="outline" icon={<HiPlus />}>Add Module</Button>
                         </div>
-                        <div className="space-y-4">
-                            {/* Demo Module */}
-                            <div className="border border-surface-border rounded-xl p-4 space-y-4">
-                                <div className="flex items-center justify-between border-b border-surface-border pb-3">
-                                    <div className="flex items-center gap-3">
-                                        <span className="bg-surface-muted text-text-secondary px-2 py-1 rounded text-[10px] font-bold">M1</span>
-                                        <input className="font-bold text-text-primary bg-transparent focus:outline-none" defaultValue="Introduction to the Course" />
-                                    </div>
-                                    <button className="text-red-400 hover:text-red-600"><HiTrash /></button>
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-3 bg-surface-muted/50 p-3 rounded-lg border-2 border-transparent hover:border-violet-200 transition-all cursor-move">
-                                        <HiVideoCamera className="text-slate-400" />
-                                        <span className="text-sm text-text-primary flex-1">1. Welcome and Setup</span>
-                                        <HiDotsVertical className="text-slate-300" />
-                                    </div>
-                                    <div className="flex items-center gap-3 bg-surface-muted/50 p-3 rounded-lg border-2 border-transparent hover:border-violet-200 transition-all cursor-move">
-                                        <HiVideoCamera className="text-slate-400" />
-                                        <span className="text-sm text-text-primary flex-1">2. Core Concepts Overview</span>
-                                        <HiDotsVertical className="text-slate-300" />
-                                    </div>
-                                </div>
-                                <button className="text-xs font-bold text-violet-600 flex items-center gap-1 hover:underline">
-                                    <HiPlus className="w-3 h-3" /> Add Lesson
-                                </button>
-                            </div>
+                        <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 text-center">
+                            <HiAcademicCap className="w-10 h-10 text-indigo-400 mx-auto mb-3" />
+                            <p className="text-sm text-indigo-900 font-bold">Curriculum builder is live!</p>
+                            <p className="text-xs text-indigo-700 mt-1">Add modules and lessons after publishing the basic course info.</p>
                         </div>
                     </div>
                 )}
@@ -167,21 +169,10 @@ export default function CreateCourse() {
                                 <span className="text-text-secondary">Visibility</span>
                                 <Badge color="green">Public</Badge>
                             </div>
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-text-secondary">Draft Saved</span>
-                                <span className="text-text-primary font-medium">Just now</span>
-                            </div>
                             <div className="flex justify-between items-center text-sm pt-2 border-t border-surface-border">
                                 <span className="text-text-secondary italic">Estimated students reached</span>
                                 <span className="text-violet-600 font-bold font-mono">1.2k+</span>
                             </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-xl border border-amber-200">
-                            <HiCog className="text-amber-500 w-6 h-6 flex-shrink-0" />
-                            <p className="text-xs text-amber-700 leading-relaxed">
-                                By publishing, your course will undergo a quick automated moderation check before appearing in search results.
-                            </p>
                         </div>
                     </div>
                 )}
@@ -193,6 +184,7 @@ export default function CreateCourse() {
                         onClick={handleBack}
                         className={clsx(step === 1 && "invisible")}
                         icon={<HiChevronLeft />}
+                        disabled={isSubmitting}
                     >
                         Back
                     </Button>
@@ -200,7 +192,14 @@ export default function CreateCourse() {
                         {step < 3 ? (
                             <Button onClick={handleNext} className="bg-violet-600 hover:bg-violet-700 text-white" iconRight={<HiChevronRight />}>Next Step</Button>
                         ) : (
-                            <Button onClick={() => navigate(ROUTES.INSTRUCTOR_COURSES)} className="bg-violet-600 hover:bg-violet-700 text-white px-8" icon={<HiCheck />}>Publish Course</Button>
+                            <Button 
+                                onClick={handleSubmit} 
+                                className="bg-violet-600 hover:bg-violet-700 text-white px-8" 
+                                icon={<HiCheck />}
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? 'Publishing...' : 'Publish Course'}
+                            </Button>
                         )}
                     </div>
                 </div>

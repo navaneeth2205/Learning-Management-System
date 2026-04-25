@@ -10,6 +10,8 @@ import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
+import { fetchMessages, sendMessageAPI } from '../../services/learnerApi';
+import CallModal from '../../components/communication/CallModal';
 
 /* ─── Font settings ────────────────────────────────────────── */
 const sora = { fontFamily: "'Sora', sans-serif" };
@@ -52,8 +54,29 @@ export default function MessageInbox() {
     const [chats, setChats] = useState(INITIAL_CHATS);
     const [messagesMap, setMessagesMap] = useState(INITIAL_MESSAGES);
     const [showOptions, setShowOptions] = useState(false);
+    const [callConfig, setCallConfig] = useState({ isOpen: false, channel: '', isVideo: true });
     const scrollRef = useRef(null);
     const optionsRef = useRef(null);
+
+    // Fetch live messages
+    useEffect(() => {
+        fetchMessages()
+            .then(data => {
+                if (data && data.threads && data.threads.length > 0) {
+                    const liveChats = data.threads.map((t, i) => ({
+                        id: 100 + i,
+                        name: t.participantName || 'User',
+                        role: t.participantRole || 'Student',
+                        status: 'online',
+                        lastMsg: t.lastMessage || '',
+                        time: t.updatedAt ? new Date(t.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+                        unread: t.unreadCount || 0,
+                    }));
+                    setChats(prev => [...liveChats, ...prev]);
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -227,13 +250,21 @@ export default function MessageInbox() {
                     </div>
                     <div className="flex items-center gap-3 relative" ref={optionsRef}>
                         <button
-                            onClick={() => toast.success(`Initiating voice call with ${activeChat?.name}...`)}
+                            onClick={() => setCallConfig({ 
+                                isOpen: true, 
+                                channel: `chat_${Math.min(selectedId, 999)}`, 
+                                isVideo: false 
+                            })}
                             className="p-3 text-slate-400 hover:text-indigo-600 transition-colors bg-slate-50 rounded-xl hover:bg-indigo-50"
                         >
                             <HiPhone className="w-5 h-5" />
                         </button>
                         <button
-                            onClick={() => toast.success(`Starting secure video call with ${activeChat?.name}...`)}
+                            onClick={() => setCallConfig({ 
+                                isOpen: true, 
+                                channel: `chat_${Math.min(selectedId, 999)}`, 
+                                isVideo: true 
+                            })}
                             className="p-3 text-slate-400 hover:text-indigo-600 transition-colors bg-slate-50 rounded-xl hover:bg-indigo-50"
                         >
                             <HiVideoCamera className="w-5 h-5" />
@@ -349,6 +380,13 @@ export default function MessageInbox() {
                     )}
                 </footer>
             </main>
+
+            <CallModal 
+                isOpen={callConfig.isOpen}
+                channelName={callConfig.channel}
+                isVideo={callConfig.isVideo}
+                onClose={() => setCallConfig({ ...callConfig, isOpen: false })}
+            />
         </div>
     );
 }

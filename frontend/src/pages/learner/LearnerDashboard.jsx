@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import {
     HiAcademicCap, HiStar, HiClock, HiFire, HiLightningBolt,
@@ -6,7 +6,7 @@ import {
     HiCollection
 } from 'react-icons/hi';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 'recharts';
-import { mockUsers, mockCourses, mockLearnerStats, mockSkills, mockDailyGoal } from '../../data/mockData';
+import { mockCourses, mockLearnerStats, mockSkills, mockDailyGoal } from '../../data/mockData';
 import { ROUTES } from '../../constants/routes';
 import { Link, useNavigate } from 'react-router-dom';
 import ProgressBar from '../../components/ui/ProgressBar';
@@ -14,14 +14,76 @@ import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Avatar from '../../components/ui/Avatar';
 import clsx from 'clsx';
+import { fetchLearnerDashboard, fetchLeaderboard, fetchCourses } from '../../services/learnerApi';
 
 export default function LearnerDashboard() {
     const { user } = useSelector(s => s.auth);
+    const [stats, setStats] = useState(null);
+    const [leaderboardData, setLeaderboardData] = useState([]);
+    const [liveCourses, setLiveCourses] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const activeCourse = useMemo(() => {
-        return mockCourses.find(c => c.progress > 0 && c.progress < 100) || mockCourses[0];
+    useEffect(() => {
+        const loadDashboard = async () => {
+            try {
+                const [dashData, lbData, coursesData] = await Promise.allSettled([
+                    fetchLearnerDashboard(),
+                    fetchLeaderboard(),
+                    fetchCourses(),
+                ]);
+                if (dashData.status === 'fulfilled') setStats(dashData.value);
+                if (lbData.status === 'fulfilled') setLeaderboardData(lbData.value);
+                if (coursesData.status === 'fulfilled') setLiveCourses(coursesData.value);
+            } catch {
+                // fallback to mock
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadDashboard();
     }, []);
-    const recommended = mockCourses.filter(c => c.progress === undefined || c.progress === 0);
+
+    // Use live data or fallback to mock
+    const enrolledCount = stats?.enrolledCourses ?? mockLearnerStats.enrolledCourses;
+    const completedCount = stats?.completedCourses ?? mockLearnerStats.completedCourses;
+    const certCount = stats?.certificates ?? mockLearnerStats.certificates;
+    const avgScore = stats?.avgScore ?? mockLearnerStats.avgScore;
+
+    // Active course from enrollments or fallback
+    const activeCourse = useMemo(() => {
+        if (stats?.enrollments?.length > 0) {
+            const inProgress = stats.enrollments.find(e => e.progress > 0 && e.progress < 100);
+            if (inProgress?.courseId) {
+                return {
+                    _id: inProgress.courseId._id,
+                    title: inProgress.courseId.title,
+                    category: inProgress.courseId.category,
+                    thumbnail: inProgress.courseId.thumbnail,
+                    progress: inProgress.progress,
+                };
+            }
+            const first = stats.enrollments[0];
+            if (first?.courseId) {
+                return {
+                    _id: first.courseId._id,
+                    title: first.courseId.title,
+                    category: first.courseId.category,
+                    thumbnail: first.courseId.thumbnail,
+                    progress: first.progress || 0,
+                };
+            }
+        }
+        return mockCourses.find(c => c.progress > 0 && c.progress < 100) || mockCourses[0];
+    }, [stats]);
+
+    // Recommended courses (live or mock)
+    const recommended = useMemo(() => {
+        if (liveCourses.length > 0) {
+            const enrolledIds = new Set((stats?.enrollments || []).map(e => e.courseId?._id?.toString()));
+            return liveCourses.filter(c => !enrolledIds.has(c._id?.toString()));
+        }
+        return mockCourses.filter(c => c.progress === undefined || c.progress === 0);
+    }, [liveCourses, stats]);
 
     const chartData = [
         { day: 'W1', hours: 45 },
@@ -29,13 +91,26 @@ export default function LearnerDashboard() {
         { day: 'W3', hours: 60 },
     ];
 
-    const leaderboard = [
-        { name: 'AlexR_21', points: '1,532', days: '15 days', color: 'orange' },
-        { name: 'LearnWithMira', points: '1,340', days: '12 days', color: 'blue' },
-        { name: 'CodeJunkie', points: '1,120', days: '10 days', color: 'purple' },
-        { name: 'DesignGuru', points: '980', days: '8 days', color: 'green' },
-        { name: 'MathMaster', points: '850', days: '7 days', color: 'red' },
-    ];
+    // Leaderboard data (live or fallback)
+    const leaderboard = useMemo(() => {
+        if (leaderboardData.length > 0) {
+            return leaderboardData.slice(0, 5).map((item, i) => ({
+                name: item.user?.name || 'Unknown',
+                points: item.totalScore?.toLocaleString() || '0',
+                days: `${item.coursesCompleted || 0} completed`,
+                color: ['orange', 'blue', 'purple', 'green', 'red'][i] || 'gray',
+            }));
+        }
+        return [
+            { name: 'AlexR_21', points: '1,532', days: '15 days', color: 'orange' },
+            { name: 'LearnWithMira', points: '1,340', days: '12 days', color: 'blue' },
+            { name: 'CodeJunkie', points: '1,120', days: '10 days', color: 'purple' },
+            { name: 'DesignGuru', points: '980', days: '8 days', color: 'green' },
+            { name: 'MathMaster', points: '850', days: '7 days', color: 'red' },
+        ];
+    }, [leaderboardData]);
+
+    const courseId = activeCourse?._id || activeCourse?.id || 1;
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
@@ -59,7 +134,7 @@ export default function LearnerDashboard() {
                             Let's keep your learning journey going. You're just one step closer to your goals.
                         </p>
                         <div className="flex flex-wrap gap-4 pt-6">
-                            <Link to={`/learner/courses/${activeCourse?.id || 1}/lessons/1`}>
+                            <Link to={`/learner/courses/${courseId}/lessons/1`}>
                                 <Button size="lg" className="!bg-white !text-primary-500 hover:!bg-white/95 border-none font-black px-10 rounded-2xl h-14 shadow-xl shadow-indigo-900/10 transition-all transform hover:-translate-y-0.5">
                                     Resume Last Course
                                 </Button>
@@ -77,10 +152,10 @@ export default function LearnerDashboard() {
                 {/* Grid Stats */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
                     {[
-                        { label: 'Courses Completed', value: '3', icon: <HiCollection className="w-5 h-5 text-blue-500" />, bg: 'bg-blue-50' },
-                        { label: 'Certificates Earned', value: '2', icon: <HiAcademicCap className="w-5 h-5 text-orange-500" />, bg: 'bg-orange-50' },
-                        { label: 'Hours Learned', value: '18.5', icon: <HiClock className="w-5 h-5 text-emerald-500" />, bg: 'bg-emerald-50' },
-                        { label: 'Streak (Days)', value: '3', icon: <HiFire className="w-5 h-5 text-rose-500" />, bg: 'bg-rose-50' },
+                        { label: 'Courses Enrolled', value: String(enrolledCount), icon: <HiCollection className="w-5 h-5 text-blue-500" />, bg: 'bg-blue-50' },
+                        { label: 'Certificates Earned', value: String(certCount), icon: <HiAcademicCap className="w-5 h-5 text-orange-500" />, bg: 'bg-orange-50' },
+                        { label: 'Avg Quiz Score', value: `${avgScore}%`, icon: <HiStar className="w-5 h-5 text-emerald-500" />, bg: 'bg-emerald-50' },
+                        { label: 'Completed', value: String(completedCount), icon: <HiFire className="w-5 h-5 text-rose-500" />, bg: 'bg-rose-50' },
                     ].map((stat, i) => (
                         <div key={i} className="bg-white p-6 rounded-xl border border-gray-200 shadow-md space-y-3">
                             <div className={clsx("w-10 h-10 rounded-lg flex items-center justify-center", stat.bg)}>
@@ -108,16 +183,17 @@ export default function LearnerDashboard() {
                             />
                         </div>
                         <div className="flex-1 space-y-2 text-center md:text-left">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-primary-500">{activeCourse.category}</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-primary-500">{activeCourse.category || 'Course'}</span>
                             <h4 className="text-lg font-black text-gray-800">{activeCourse.title}</h4>
                             <div className="flex items-center gap-3">
-                                <span className="text-xs text-gray-600 font-bold">Next Module: Functions & Modules</span>
+                                <span className="text-xs text-gray-600 font-bold">Progress</span>
                                 <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden max-w-[200px]">
-                                    <div className="h-full bg-primary-500 rounded-full" style={{ width: `${activeCourse.progress}%` }} />
+                                    <div className="h-full bg-primary-500 rounded-full" style={{ width: `${activeCourse.progress || 0}%` }} />
                                 </div>
+                                <span className="text-xs font-bold text-primary-500">{activeCourse.progress || 0}%</span>
                             </div>
                         </div>
-                        <Link to={`/learner/courses/${activeCourse?.id || 1}/lessons/1`}>
+                        <Link to={`/learner/courses/${courseId}/lessons/1`}>
                             <Button className="bg-primary-500 text-white px-8 rounded-xl font-bold h-12 shadow-lg shadow-indigo-100 whitespace-nowrap">
                                 Resume Course
                             </Button>
@@ -125,7 +201,6 @@ export default function LearnerDashboard() {
                     </div>
                 </section>
 
-                {/* For You Section */}
                 {/* For You & Skill Progress Side-by-Side */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                     {/* For You Section */}
@@ -136,37 +211,41 @@ export default function LearnerDashboard() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {recommended.slice(0, 2).map((c, i) => (
-                                <div key={i} className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-md flex flex-col justify-between group h-full">
-                                    <div className="relative h-40 overflow-hidden">
-                                        <img
-                                            src={c.thumbnail || `https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800&auto=format&fit=crop&${c.id}`}
-                                            alt={c.title}
-                                            onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800&auto=format&fit=crop'; e.currentTarget.onerror = null; }}
-                                            className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500 rounded-t-xl"
-                                        />
-                                    </div>
-                                    <div className="p-6 flex-1 flex flex-col space-y-4">
-                                        <div className="space-y-1">
-                                            <span className={clsx(
-                                                "text-[10px] font-black uppercase tracking-widest",
-                                                c.category === 'Design' ? 'text-violet-500' : 'text-emerald-500'
-                                            )}>
-                                                {c.category?.toUpperCase() || 'PERSONAL'}
-                                            </span>
-                                            <h4 className="text-lg font-black text-gray-800 group-hover:text-primary-500 transition-colors">{c.title}</h4>
+                            {recommended.slice(0, 2).map((c, i) => {
+                                const cId = c._id || c.id;
+                                const instructorName = c.instructorId?.name || c.instructorName || 'Instructor';
+                                return (
+                                    <Link key={i} to={`/learner/courses/${cId}`} className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-md flex flex-col justify-between group h-full">
+                                        <div className="relative h-40 overflow-hidden">
+                                            <img
+                                                src={c.thumbnail || `https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800&auto=format&fit=crop&${cId}`}
+                                                alt={c.title}
+                                                onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800&auto=format&fit=crop'; e.currentTarget.onerror = null; }}
+                                                className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500 rounded-t-xl"
+                                            />
                                         </div>
-                                        <p className="text-sm text-gray-600 font-bold">{c.lessons || 20} lessons</p>
-                                        <div className="pt-4 flex items-center gap-3 border-t border-slate-50 mt-auto">
-                                            <Avatar name={c.instructorName} size="sm" />
-                                            <div className="text-[11px]">
-                                                <p className="font-black text-gray-800">{c.instructorName || 'Alex Johnson'}</p>
-                                                <p className="text-gray-600 font-bold font-mono text-[9px]">Instructor</p>
+                                        <div className="p-6 flex-1 flex flex-col space-y-4">
+                                            <div className="space-y-1">
+                                                <span className={clsx(
+                                                    "text-[10px] font-black uppercase tracking-widest",
+                                                    c.category === 'Design' ? 'text-violet-500' : 'text-emerald-500'
+                                                )}>
+                                                    {c.category?.toUpperCase() || 'COURSE'}
+                                                </span>
+                                                <h4 className="text-lg font-black text-gray-800 group-hover:text-primary-500 transition-colors">{c.title}</h4>
+                                            </div>
+                                            <p className="text-sm text-gray-600 font-bold">{c.lessons || c.enrolledCount || 0} enrolled</p>
+                                            <div className="pt-4 flex items-center gap-3 border-t border-slate-50 mt-auto">
+                                                <Avatar name={instructorName} size="sm" />
+                                                <div className="text-[11px]">
+                                                    <p className="font-black text-gray-800">{instructorName}</p>
+                                                    <p className="text-gray-600 font-bold font-mono text-[9px]">Instructor</p>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
-                            ))}
+                                    </Link>
+                                );
+                            })}
                         </div>
                     </section>
 
@@ -244,13 +323,13 @@ export default function LearnerDashboard() {
                 <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md space-y-6">
                     <div className="space-y-1">
                         <h4 className="text-lg font-black text-gray-800 flex items-center gap-2">
-                            You're on fire, {user?.name?.split(' ')[0] || 'Lamine'}! 🔥
+                            You're on fire, {user?.name?.split(' ')[0] || 'Learner'}! 🔥
                         </h4>
                         <p className="text-sm text-gray-600 font-medium leading-relaxed">
-                            You've learned for 3 days in a row. Keep the momentum going!
+                            You have {enrolledCount} course{enrolledCount !== 1 ? 's' : ''} enrolled and {completedCount} completed. Keep the momentum going!
                         </p>
                     </div>
-                    <Link to={`/learner/courses/${activeCourse?.id || 1}/lessons/1`}>
+                    <Link to={`/learner/courses/${courseId}/lessons/1`}>
                         <Button fullWidth className="bg-white text-primary-500 border border-primary-500/20 h-12 rounded-xl font-bold shadow-sm hover:bg-slate-50 transition-all">
                             Start Learning
                         </Button>

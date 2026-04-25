@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     HiAcademicCap, HiDownload, HiShare, HiExternalLink,
     HiCheckCircle, HiChevronRight, HiStar, HiLink,
@@ -7,6 +7,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import Button from '../../components/ui/Button';
+import { fetchMyCertificates } from '../../services/learnerApi';
 
 /* ─── Font helpers ─────────────────────────────────────────── */
 const sora = { fontFamily: "'Sora', sans-serif" };
@@ -43,6 +44,26 @@ const certificates = [
 export default function CertificatesPage() {
     const navigate = useNavigate();
     const [shareSuccess, setShareSuccess] = useState(false);
+    const [allCertificates, setAllCertificates] = useState(certificates);
+
+    useEffect(() => {
+        fetchMyCertificates()
+            .then(data => {
+                if (data && data.length > 0) {
+                    const mapped = data.map((c, i) => ({
+                        id: c._id || i + 100,
+                        title: c.courseId?.title || c.title || 'Certificate',
+                        issuedBy: 'InternMatch Academy',
+                        date: c.issuedAt ? new Date(c.issuedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
+                        score: c.grade ? `${c.grade}%` : '—',
+                        idCode: c.certificateNumber || `IM-${Date.now()}-${i}`,
+                        gradient: CERT_GRADIENTS[i % CERT_GRADIENTS.length],
+                    }));
+                    setAllCertificates(prev => [...mapped, ...prev]);
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     const handleShare = () => {
         const profileUrl = window.location.origin + "/learner/profile/public";
@@ -94,7 +115,7 @@ export default function CertificatesPage() {
 
             {/* ── Grid ─────────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {certificates.map(cert => (
+                {allCertificates.map(cert => (
                     <CertificateCard key={cert.id} cert={cert} />
                 ))}
 

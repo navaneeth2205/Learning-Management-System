@@ -1,7 +1,7 @@
 import { successResponse } from '../../utils/responseHandler.js';
 import { createAppError } from '../../utils/constants.js';
 
-import { assignGrade, createSubmission, getSubmissionsByAssignment } from './submission.service.js';
+import { assignGrade, createSubmission, getSubmissionsByAssignment, getSubmissionsByUser } from './submission.service.js';
 
 export const submitAssignmentController = async (req, res, next) => {
 	try {
@@ -44,6 +44,18 @@ export const gradeSubmissionController = async (req, res, next) => {
 export const listSubmissionsByAssignmentController = async (req, res, next) => {
 	try {
 		const submissions = await getSubmissionsByAssignment(req.params.assignmentId);
+		return successResponse(res, {
+			message: 'Submissions fetched successfully',
+			data: submissions,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const mySubmissionsController = async (req, res, next) => {
+	try {
+		const submissions = await getSubmissionsByUser(req.user._id);
 		return successResponse(res, {
 			message: 'Submissions fetched successfully',
 			data: submissions,

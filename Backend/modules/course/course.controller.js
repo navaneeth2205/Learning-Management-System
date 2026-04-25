@@ -1,6 +1,6 @@
 import { successResponse } from '../../utils/responseHandler.js';
 
-import { createCourse, getCourseById, getCourses } from './course.service.js';
+import { createCourse, getCourses, getCourseById, getCourseWithDetails, updateCourse, deleteCourse, getAllCoursesUnfiltered } from './course.service.js';
 
 export const createCourseController = async (req, res, next) => {
 	try {
@@ -17,7 +17,8 @@ export const createCourseController = async (req, res, next) => {
 
 export const getAllCoursesController = async (req, res, next) => {
 	try {
-		const courses = await getCourses();
+		const { category, difficulty, search, instructorId } = req.query;
+		const courses = await getCourses({ category, difficulty, search, instructorId });
 		return successResponse(res, {
 			message: 'Courses fetched successfully',
 			data: courses,
@@ -33,6 +34,41 @@ export const getSingleCourseController = async (req, res, next) => {
 		return successResponse(res, {
 			message: 'Course fetched successfully',
 			data: course,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const getCourseDetailController = async (req, res, next) => {
+	try {
+		const course = await getCourseWithDetails(req.params.courseId);
+		return successResponse(res, {
+			message: 'Course details fetched successfully',
+			data: course,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const updateCourseController = async (req, res, next) => {
+	try {
+		const course = await updateCourse(req.params.courseId, req.body);
+		return successResponse(res, {
+			message: 'Course updated successfully',
+			data: course,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const deleteCourseController = async (req, res, next) => {
+	try {
+		await deleteCourse(req.params.courseId);
+		return successResponse(res, {
+			message: 'Course deleted successfully',
 		});
 	} catch (error) {
 		return next(error);

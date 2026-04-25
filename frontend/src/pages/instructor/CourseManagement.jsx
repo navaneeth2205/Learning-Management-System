@@ -16,6 +16,8 @@ import Badge from '../../components/ui/Badge';
 import SearchBar from '../../components/ui/SearchBar';
 import { Table, Thead, Tbody, Tr, Th, Td } from '../../components/ui/Table';
 import Pagination from '../../components/ui/Pagination';
+import { fetchInstructorCourses, deleteCourse } from '../../services/instructorApi';
+import { useEffect } from 'react';
 
 export default function CourseManagement() {
     const [search, setSearch] = useState('');
@@ -28,7 +30,26 @@ export default function CourseManagement() {
 
     // Add local state so we can actually mutate the course list
     const [instructorCourses, setInstructorCourses] = useState(mockCourses);
+    const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        fetchInstructorCourses()
+            .then(data => {
+                if (data && data.length > 0) {
+                    setInstructorCourses(data.map(c => ({
+                        id: c._id || c.id,
+                        title: c.title,
+                        category: c.category || 'Web Development',
+                        status: c.status || 'draft',
+                        enrolled: c.enrollmentCount || 0,
+                        rating: c.rating || 0
+                    })));
+                }
+                setLoading(false);
+            })
+            .catch(() => setLoading(false));
+    }, []);
 
     const ITEMS_PER_PAGE = 5;
 

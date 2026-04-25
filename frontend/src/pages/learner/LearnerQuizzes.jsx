@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     HiLightningBolt, HiCheckCircle, HiPlay, HiQuestionMarkCircle,
@@ -7,6 +7,7 @@ import {
 } from 'react-icons/hi';
 import Select from '../../components/ui/Select';
 import clsx from 'clsx';
+import { fetchMyQuizzes } from '../../services/learnerApi';
 
 /* ─── Font helpers ─────────────────────────────────────────── */
 const sora = { fontFamily: "'Sora', sans-serif" };
@@ -101,15 +102,41 @@ export default function LearnerQuizzes() {
     const [search, setSearch] = useState('');
     const [course, setCourse] = useState('All Courses');
     const [diff, setDiff] = useState('All Difficulties');
+    const [liveQuizzes, setLiveQuizzes] = useState([]);
     const navigate = useNavigate();
 
-    const completed = QUIZZES.filter(q => q.status === 'completed');
+    useEffect(() => {
+        fetchMyQuizzes()
+            .then(data => {
+                if (data && data.length > 0) {
+                    const mapped = data.map(q => ({
+                        id: q._id,
+                        status: q.status || 'available',
+                        title: q.title,
+                        course: q.courseId?.title || 'Course',
+                        duration: `${q.timeLimit || 30}m`,
+                        questions: q.questions?.length || 0,
+                        passRate: q.passingScore || 70,
+                        xp: (q.questions?.length || 5) * 15,
+                        maxAttempts: 3,
+                        attemptsUsed: q.attempts || 0,
+                        score: q.score || undefined,
+                        desc: `Quiz for ${q.courseId?.title || 'this course'}. ${q.questions?.length || 0} questions.`,
+                    }));
+                    setLiveQuizzes(mapped);
+                }
+            })
+            .catch(() => {});
+    }, []);
+
+    const allQuizzes = liveQuizzes.length > 0 ? [...liveQuizzes, ...QUIZZES] : QUIZZES;
+    const completed = allQuizzes.filter(q => q.status === 'completed');
     const avgScore = completed.length
-        ? Math.round(completed.reduce((s, q) => s + q.score, 0) / completed.length)
+        ? Math.round(completed.reduce((s, q) => s + (q.score || 0), 0) / completed.length)
         : 0;
     const totalXP = completed.reduce((s, q) => s + q.xp, 0);
 
-    const visible = QUIZZES.filter(q => {
+    const visible = allQuizzes.filter(q => {
         const matchTab = tab === 'All' || q.status === tab.toLowerCase();
         const matchSearch = q.title.toLowerCase().includes(search.toLowerCase()) ||
             q.course.toLowerCase().includes(search.toLowerCase());
@@ -120,7 +147,7 @@ export default function LearnerQuizzes() {
     const availableGroup = visible.filter(q => q.status !== 'upcoming');
     const upcomingGroup = visible.filter(q => q.status === 'upcoming');
 
-    const courses = ['All Courses', ...new Set(QUIZZES.map(q => q.course))];
+    const courses = ['All Courses', ...new Set(allQuizzes.map(q => q.course))];
 
     return (
         <div className="p-6 max-w-5xl mx-auto space-y-8" style={sora}>

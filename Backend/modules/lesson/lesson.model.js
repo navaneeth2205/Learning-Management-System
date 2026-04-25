@@ -24,6 +24,18 @@ const lessonSchema = new mongoose.Schema(
 			enum: [LESSON_TYPES.VIDEO, LESSON_TYPES.PDF],
 			required: true,
 		},
+		duration: {
+			type: String,
+			default: '',
+		},
+		order: {
+			type: Number,
+			default: 0,
+		},
+		description: {
+			type: String,
+			default: '',
+		},
 	},
 	{
 		versionKey: false,

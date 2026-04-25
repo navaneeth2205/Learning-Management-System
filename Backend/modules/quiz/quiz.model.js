@@ -44,6 +44,17 @@ const quizSchema = new mongoose.Schema(
 				message: 'Quiz must include at least one question',
 			},
 		},
+		timeLimit: {
+			type: Number,
+			default: 30,
+			min: 1,
+		},
+		passingScore: {
+			type: Number,
+			default: 70,
+			min: 0,
+			max: 100,
+		},
 		createdBy: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: 'User',

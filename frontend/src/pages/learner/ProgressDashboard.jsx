@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
     HiChartBar, HiAcademicCap, HiLightningBolt, HiFire,
     HiTrendingUp, HiBookmark, HiClock, HiCheckCircle
@@ -8,14 +9,30 @@ import {
 } from 'recharts';
 import Badge from '../../components/ui/Badge';
 import ProgressBar from '../../components/ui/ProgressBar';
+import { fetchDashboardStats } from '../../services/learnerApi';
 
 export default function ProgressDashboard() {
-    const stats = [
+    const [stats, setStats] = useState([
         { label: 'Courses in Progress', value: '12', icon: HiAcademicCap, color: 'blue' },
         { label: 'Completed Lessons', value: '45', icon: HiCheckCircle, color: 'emerald' },
         { label: 'Study Streak', value: '15 Days', icon: HiFire, color: 'orange' },
         { label: 'Total Hours', value: '128h', icon: HiClock, color: 'purple' },
-    ];
+    ]);
+
+    useEffect(() => {
+        fetchDashboardStats()
+            .then(data => {
+                if (data) {
+                    setStats([
+                        { label: 'Courses in Progress', value: String(data.coursesInProgress || 12), icon: HiAcademicCap, color: 'blue' },
+                        { label: 'Completed Lessons', value: String(data.completedLessons || 45), icon: HiCheckCircle, color: 'emerald' },
+                        { label: 'Study Streak', value: `${data.streak || 15} Days`, icon: HiFire, color: 'orange' },
+                        { label: 'Total Hours', value: `${data.totalHours || 128}h`, icon: HiClock, color: 'purple' },
+                    ]);
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     const weeklyProgress = [
         { day: 'Mon', mins: 45 },
