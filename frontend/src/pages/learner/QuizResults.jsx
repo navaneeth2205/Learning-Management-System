@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { HiOutlineRefresh } from 'react-icons/hi';
-import { mockQuizzes, mockAttemptResult } from '../../mock/mockQuizzes';
+import { fetchQuizById, fetchQuizAttemptResult } from '../../services/learnerApi';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import QuestionCard from '../../components/quiz/QuestionCard';
@@ -11,25 +11,23 @@ export default function QuizResults() {
     const navigate = useNavigate();
 
     const [counter, setCounter] = useState(0);
-    const quiz = mockQuizzes.find(x => x.id === id);
+    const [quiz, setQuiz] = useState(null);
+    const [result, setResult] = useState(null);
+    const [loading, setLoading] = useState(true);
 
-    // Dynamic result based on selected quiz
-    const result = (id === mockAttemptResult.quizId) ? mockAttemptResult : (quiz ? {
-        score: 100, // Default to 100% for perfect review simulation
-        passed: true,
-        earnedPoints: quiz.questions.reduce((s, q) => s + q.points, 0) || 100,
-        totalPoints: quiz.questions.reduce((s, q) => s + q.points, 0) || 100,
-        timeTaken: '14:20',
-        submittedAt: quiz.dueDate || 'Recently',
-        answers: quiz.questions.map(q => ({
-            questionId: q.id,
-            selected: q.correctOption,
-            correct: true,
-            points: q.points
-        }))
-    } : mockAttemptResult);
+    useEffect(() => {
+        Promise.allSettled([
+            fetchQuizById(id),
+            fetchQuizAttemptResult(id).catch(() => null),
+        ]).then(([quizRes, resultRes]) => {
+            if (quizRes.status === 'fulfilled') setQuiz(quizRes.value);
+            if (resultRes.status === 'fulfilled' && resultRes.value) setResult(resultRes.value);
+            setLoading(false);
+        });
+    }, [id]);
 
-    const attemptsLeft = quiz ? (quiz.maxAttempts - quiz.attemptsUsed) : 0;
+    const score = result?.score ?? 0;
+    const attemptsLeft = (quiz?.maxAttempts ?? 1) - (quiz?.attemptsUsed ?? 0);
     const canRetry = attemptsLeft > 0;
 
     useEffect(() => {
@@ -39,15 +37,16 @@ export default function QuizResults() {
             const elapsed = Date.now() - startObj;
             const progress = Math.min(elapsed / duration, 1);
             const easeOut = 1 - Math.pow(1 - progress, 3);
-            setCounter(Math.round(easeOut * result.score));
+            setCounter(Math.round(easeOut * score));
             if (progress < 1) requestAnimationFrame(tick);
-        }
+        };
         requestAnimationFrame(tick);
-    }, [result.score]);
+    }, [score]);
 
-    if (!quiz) return <div>404</div>
+    if (loading) return <div className="p-10 font-bold text-slate-500">Loading results...</div>;
+    if (!quiz) return <div className="p-10 font-bold text-rose-500">Quiz not found</div>;
 
-    const ringColor = result.passed ? '#10b981' : '#ef4444';
+    const ringColor = (result?.passed) ? '#10b981' : '#ef4444';
     const circumference = 2 * Math.PI * 54;
     const offset = circumference - (counter / 100) * circumference;
 

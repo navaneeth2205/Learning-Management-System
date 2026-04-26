@@ -12,7 +12,7 @@ import {
     ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
     LineChart, Line
 } from 'recharts';
-import { mockAdminStats } from '../../data/mockData';
+
 import { ROUTES } from '../../constants/routes';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -63,7 +63,7 @@ export default function AdminDashboard() {
     }, []);
 
     const kpis = [
-        { label: 'Platform Users', value: mockAdminStats.totalUsers, icon: HiUsers, color: 'emerald', gradient: 'from-emerald-500 to-teal-600' },
+        { label: 'Platform Users', value: 0, icon: HiUsers, color: 'emerald', gradient: 'from-emerald-500 to-teal-600' },
         { label: 'System Uptime', value: 99.98, icon: HiLightningBolt, color: 'blue', suffix: '%', gradient: 'from-blue-500 to-indigo-600' },
         { label: 'Active Orgs', value: 124, icon: HiShieldCheck, color: 'violet', gradient: 'from-violet-500 to-purple-600' },
         { label: 'Daily Active Users', value: 8450, icon: HiTrendingUp, color: 'amber', prefix: '', gradient: 'from-amber-400 to-orange-500' },

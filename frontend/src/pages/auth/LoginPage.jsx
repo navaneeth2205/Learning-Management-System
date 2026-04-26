@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { GoogleLogin } from '@react-oauth/google';
@@ -21,29 +21,28 @@ const roleDashboards = {
 const AUTH_STORAGE_KEY = 'lms_auth';
 
 export default function LoginPage() {
-    const [form, setForm] = useState({ email: '', password: '' });
+    const savedCredentials = (() => {
+        try {
+            const raw = localStorage.getItem('lms_saved_credentials');
+            if (!raw) return { email: '', password: '', rememberMe: false };
+            const parsed = JSON.parse(raw);
+            if (parsed?.email && parsed?.password) {
+                return { email: parsed.email, password: parsed.password, rememberMe: true };
+            }
+        } catch (_error) {
+            void _error;
+        }
+        return { email: '', password: '', rememberMe: false };
+    })();
+
+    const [form, setForm] = useState({ email: savedCredentials.email, password: savedCredentials.password });
     const [showPass, setShowPass] = useState(false);
-    const [rememberMe, setRememberMe] = useState(false);
+    const [rememberMe, setRememberMe] = useState(savedCredentials.rememberMe);
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const location = useLocation();
-
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem('lms_saved_credentials');
-            if (saved) {
-                const { email, password } = JSON.parse(saved);
-                if (email && password) {
-                    setForm({ email, password });
-                    setRememberMe(true);
-                }
-            }
-        } catch (e) {
-            console.warn('Failed to load saved credentials', e);
-        }
-    }, []);
 
     const validate = () => {
         const errs = {};

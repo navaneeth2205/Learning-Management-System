@@ -11,8 +11,8 @@ import { logout } from '../features/auth/authSlice';
 import { ROUTES } from '../constants/routes';
 import Avatar from '../components/ui/Avatar';
 import clsx from 'clsx';
-import { mockCourses } from '../data/mockData';
 import NotificationCenter from '../components/ui/NotificationCenter';
+import { fetchCourses } from '../services/learnerApi';
 
 const sidebarSections = [
     {
@@ -66,17 +66,29 @@ export default function LearnerLayout() {
     ]);
 
     useEffect(() => {
-        if (searchQuery.trim().length > 0) {
-            const query = searchQuery.toLowerCase().trim();
-            const filtered = mockCourses.filter(course =>
-                course.title.toLowerCase().includes(query) ||
-                course.category.toLowerCase().includes(query) ||
-                course.instructorName.toLowerCase().includes(query)
-            ).slice(0, 5); // Limit to top 5 results
-            setSearchResults(filtered);
-        } else {
+        const query = searchQuery.trim();
+
+        if (!query) {
             setSearchResults([]);
+            return;
         }
+
+        let isMounted = true;
+        const runSearch = async () => {
+            try {
+                const results = await fetchCourses({ search: query });
+                if (!isMounted) return;
+                setSearchResults((Array.isArray(results) ? results : []).slice(0, 5));
+            } catch {
+                if (isMounted) setSearchResults([]);
+            }
+        };
+
+        runSearch();
+
+        return () => {
+            isMounted = false;
+        };
     }, [searchQuery]);
 
     const handleSearch = (e) => {

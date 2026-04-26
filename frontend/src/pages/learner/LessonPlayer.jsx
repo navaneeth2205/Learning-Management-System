@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import {
     HiChevronLeft, HiChevronRight, HiCheckCircle,
     HiPlay, HiDocumentText, HiBookmark, HiChatAlt,
@@ -10,16 +11,39 @@ import { ROUTES } from '../../constants/routes';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Avatar from '../../components/ui/Avatar';
+import DiscussionList from '../../components/discussion/DiscussionList';
+import DiscussionDetail from '../../components/discussion/DiscussionDetail';
+import CreateDiscussionModal from '../../components/discussion/CreateDiscussionModal';
 import clsx from 'clsx';
 import confetti from 'canvas-confetti';
-import { fetchLessonsByCourse, fetchCourseById, updateProgress, fetchMyProgress } from '../../services/learnerApi';
+import {
+    fetchLessonsByCourse,
+    fetchCourseById,
+    updateProgress,
+    fetchMyProgress,
+    createNote,
+    fetchNotesByLesson,
+    deleteNote,
+    createDiscussionThread,
+    fetchDiscussionsByLesson,
+    fetchRepliesByDiscussion,
+    createDiscussionReply,
+    upvoteDiscussion,
+    upvoteReply,
+    markBestAnswer,
+    resolveDiscussion,
+    deleteDiscussionThread,
+    deleteDiscussionReply,
+} from '../../services/learnerApi';
 import toast from 'react-hot-toast';
 import ReactPlayer from 'react-player';
+import { formatDuration } from '../../utils/formatDuration';
 
 export default function LessonPlayer() {
     const { courseId, lessonOrder } = useParams();
     const lessonOrderNum = Number(lessonOrder);
     const navigate = useNavigate();
+    const currentUser = useSelector(state => state.auth?.user);
     const videoRef = useRef(null);
     const playerRef = useRef(null);       // ReactPlayer ref
     const playerContainerRef = useRef(null); // outer container for fullscreen
@@ -51,6 +75,25 @@ export default function LessonPlayer() {
 
     // Completed lessons state
     const [completedLessons, setCompletedLessons] = useState(new Set());
+
+    // Notes state
+    const [noteInput, setNoteInput] = useState('');
+    const [notes, setNotes] = useState([]);
+    const [notesLoading, setNotesLoading] = useState(false);
+    const [notesSaving, setNotesSaving] = useState(false);
+    const [notesError, setNotesError] = useState('');
+
+    // Discussion state
+    const [discussions, setDiscussions] = useState([]);
+    const [selectedDiscussion, setSelectedDiscussion] = useState(null);
+    const [discussionsLoading, setDiscussionsLoading] = useState(false);
+    const [discussionsError, setDiscussionsError] = useState('');
+    const [repliesLoading, setRepliesLoading] = useState(false);
+    const [replies, setReplies] = useState([]);
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [discussionSortBy, setDiscussionSortBy] = useState('latest');
+    const [creatingDiscussion, setCreatingDiscussion] = useState(false);
+    const [creatingReply, setCreatingReply] = useState(false);
 
     const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://127.0.0.1:5000';
 
@@ -200,6 +243,88 @@ export default function LessonPlayer() {
         setIsBookmarked(false);
     }, [lessonOrderNum, completedLessons, currentLesson]);
 
+    useEffect(() => {
+        const lessonId = currentLesson?._id || currentLesson?.id;
+        if (!lessonId) {
+            setNotes([]);
+            setNotesError('');
+            return;
+        }
+
+        setNotesLoading(true);
+        setNotesError('');
+
+        fetchNotesByLesson(lessonId)
+            .then((data) => {
+                const items = Array.isArray(data) ? data : [];
+                setNotes(
+                    items
+                        .slice()
+                        .sort((a, b) => {
+                            const ta = Number.isFinite(Number(a?.timestamp)) ? Number(a.timestamp) : Number.MAX_SAFE_INTEGER;
+                            const tb = Number.isFinite(Number(b?.timestamp)) ? Number(b.timestamp) : Number.MAX_SAFE_INTEGER;
+                            if (ta !== tb) return ta - tb;
+                            return new Date(a?.createdAt || 0) - new Date(b?.createdAt || 0);
+                        })
+                );
+            })
+            .catch((err) => {
+                setNotesError(err?.message || 'Failed to load notes');
+            })
+            .finally(() => {
+                setNotesLoading(false);
+            });
+    }, [currentLesson?._id, currentLesson?.id]);
+
+    // Load discussions for current lesson
+    useEffect(() => {
+        const lessonId = currentLesson?._id || currentLesson?.id;
+        if (!lessonId) {
+            setDiscussions([]);
+            setDiscussionsError('');
+            setSelectedDiscussion(null);
+            return;
+        }
+
+        setDiscussionsLoading(true);
+        setDiscussionsError('');
+
+        fetchDiscussionsByLesson(lessonId, discussionSortBy)
+            .then((data) => {
+                const items = Array.isArray(data) ? data : [];
+                setDiscussions(items);
+                setSelectedDiscussion(null);
+            })
+            .catch((err) => {
+                setDiscussionsError(err?.message || 'Failed to load discussions');
+            })
+            .finally(() => {
+                setDiscussionsLoading(false);
+            });
+    }, [currentLesson?._id, currentLesson?.id, discussionSortBy]);
+
+    // Load replies for selected discussion
+    useEffect(() => {
+        if (!selectedDiscussion?._id) {
+            setReplies([]);
+            return;
+        }
+
+        setRepliesLoading(true);
+
+        fetchRepliesByDiscussion(selectedDiscussion._id)
+            .then((data) => {
+                const items = Array.isArray(data) ? data : [];
+                setReplies(items);
+            })
+            .catch((err) => {
+                toast.error('Failed to load replies');
+            })
+            .finally(() => {
+                setRepliesLoading(false);
+            });
+    }, [selectedDiscussion?._id]);
+
     // Navigation helpers — use order numbers for URLs, not ObjectIds
     const currentLessonOrder = Number(currentLesson?.order);
     const currentIndex = allLessons.findIndex(l => Number(l.order) === currentLessonOrder);
@@ -317,6 +442,236 @@ export default function LessonPlayer() {
     const isDirectVideoFileUrl = (url) => {
         if (!url) return false;
         return /\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(url) || /\/uploads\//i.test(url);
+    };
+
+    const formatTimestamp = (seconds) => {
+        if (!Number.isFinite(Number(seconds)) || Number(seconds) < 0) return '--:--';
+        const whole = Math.floor(Number(seconds));
+        const mins = Math.floor(whole / 60);
+        const secs = whole % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    };
+
+    const seekToTimestamp = (seconds) => {
+        const numeric = Number(seconds);
+        if (!Number.isFinite(numeric) || numeric < 0) return;
+
+        if (videoRef.current) {
+            videoRef.current.currentTime = numeric;
+            return;
+        }
+
+        try {
+            playerRef.current?.seekTo(numeric, 'seconds');
+        } catch (_) {
+        }
+    };
+
+    // Get actual current time from video element/player (not from state)
+    const getActualCurrentTime = () => {
+        // Try native video ref first
+        if (videoRef.current?.currentTime !== undefined) {
+            return videoRef.current.currentTime;
+        }
+        // Then try ReactPlayer ref
+        if (playerRef.current?.getCurrentTime) {
+            try {
+                const time = playerRef.current.getCurrentTime();
+                if (Number.isFinite(time)) {
+                    return time;
+                }
+            } catch (_) {
+                // ignore
+            }
+        }
+        // Fallback to state
+        return currentTime;
+    };
+
+    const handleSaveNote = async () => {
+        const lessonId = currentLesson?._id || currentLesson?.id;
+        const content = String(noteInput || '').trim();
+
+        if (!lessonId) {
+            toast.error('Lesson not loaded');
+            return;
+        }
+
+        if (!content) {
+            toast.error('Please write a note before saving');
+            return;
+        }
+
+        // Capture the live playback position at save time
+        const noteTimestamp = isVideo ? Math.floor(getActualCurrentTime() || 0) : null;
+
+        setNotesSaving(true);
+        try {
+            const saved = await createNote({
+                lessonId,
+                content,
+                timestamp: noteTimestamp,
+            });
+
+            setNotes((prev) =>
+                [...prev, saved].sort((a, b) => {
+                    const ta = Number.isFinite(Number(a?.timestamp)) ? Number(a.timestamp) : Number.MAX_SAFE_INTEGER;
+                    const tb = Number.isFinite(Number(b?.timestamp)) ? Number(b.timestamp) : Number.MAX_SAFE_INTEGER;
+                    if (ta !== tb) return ta - tb;
+                    return new Date(a?.createdAt || 0) - new Date(b?.createdAt || 0);
+                })
+            );
+            setNoteInput('');
+            toast.success('Note saved');
+        } catch (err) {
+            toast.error(err?.message || 'Failed to save note');
+        } finally {
+            setNotesSaving(false);
+        }
+    };
+
+    const handleDeleteNote = async (noteId) => {
+        try {
+            await deleteNote(noteId);
+            setNotes((prev) => prev.filter((note) => String(note._id || note.id) !== String(noteId)));
+            toast.success('Note deleted');
+        } catch (err) {
+            toast.error(err?.message || 'Failed to delete note');
+        }
+    };
+
+    // Discussion handlers
+    const handleCreateDiscussion = async ({ title, content, tags }) => {
+        const lessonId = currentLesson?._id || currentLesson?.id;
+        if (!lessonId) {
+            toast.error('Lesson not loaded');
+            return;
+        }
+
+        setCreatingDiscussion(true);
+        try {
+            await createDiscussionThread({
+                lessonId,
+                title,
+                content,
+                tags,
+            });
+
+            // Reload discussions
+            const updated = await fetchDiscussionsByLesson(lessonId, discussionSortBy);
+            setDiscussions(updated || []);
+            setShowCreateModal(false);
+            toast.success('Discussion created successfully');
+        } catch (err) {
+            toast.error(err?.message || 'Failed to create discussion');
+            throw err;
+        } finally {
+            setCreatingDiscussion(false);
+        }
+    };
+
+    const handleAddReply = async (discussionId, content) => {
+        setCreatingReply(true);
+        try {
+            await createDiscussionReply({
+                discussionId,
+                content,
+            });
+
+            // Reload replies
+            const updated = await fetchRepliesByDiscussion(discussionId);
+            setReplies(updated || []);
+            toast.success('Reply posted successfully');
+        } catch (err) {
+            toast.error(err?.message || 'Failed to post reply');
+            throw err;
+        } finally {
+            setCreatingReply(false);
+        }
+    };
+
+    const handleUpvoteDiscussion = async (discussionId) => {
+        try {
+            const updated = await upvoteDiscussion(discussionId);
+            setDiscussions(prev =>
+                prev.map(d =>
+                    String(d._id) === String(discussionId)
+                        ? { ...d, upvotes: updated.upvotes }
+                        : d
+                )
+            );
+            if (selectedDiscussion?._id === discussionId) {
+                setSelectedDiscussion(prev => ({ ...prev, upvotes: updated.upvotes }));
+            }
+            toast.success('Upvoted');
+        } catch (err) {
+            toast.error(err?.message || 'Failed to upvote');
+        }
+    };
+
+    const handleUpvoteReply = async (replyId) => {
+        try {
+            const updated = await upvoteReply(replyId);
+            setReplies(prev =>
+                prev.map(r =>
+                    String(r._id) === String(replyId)
+                        ? { ...r, upvotes: updated.upvotes }
+                        : r
+                )
+            );
+            toast.success('Reply upvoted');
+        } catch (err) {
+            toast.error(err?.message || 'Failed to upvote reply');
+        }
+    };
+
+    const handleMarkBestAnswer = async (replyId, discussionId) => {
+        try {
+            await markBestAnswer(replyId, { discussionId });
+            const updated = await fetchRepliesByDiscussion(discussionId);
+            setReplies(updated || []);
+            toast.success('Best answer marked');
+        } catch (err) {
+            toast.error(err?.message || 'Failed to mark best answer');
+        }
+    };
+
+    const handleResolveDiscussion = async (discussionId) => {
+        try {
+            const updated = await resolveDiscussion(discussionId);
+            setDiscussions(prev =>
+                prev.map(d =>
+                    String(d._id) === String(discussionId)
+                        ? { ...d, isResolved: updated.isResolved }
+                        : d
+                )
+            );
+            setSelectedDiscussion(prev => ({ ...prev, isResolved: updated.isResolved }));
+            toast.success(updated.isResolved ? 'Marked as resolved' : 'Marked as unresolved');
+        } catch (err) {
+            toast.error(err?.message || 'Failed to update discussion');
+        }
+    };
+
+    const handleDeleteDiscussion = async (discussionId) => {
+        try {
+            await deleteDiscussionThread(discussionId);
+            setDiscussions(prev => prev.filter(d => String(d._id) !== String(discussionId)));
+            setSelectedDiscussion(null);
+            toast.success('Discussion deleted');
+        } catch (err) {
+            toast.error(err?.message || 'Failed to delete discussion');
+        }
+    };
+
+    const handleDeleteReply = async (replyId) => {
+        try {
+            await deleteDiscussionReply(replyId);
+            setReplies(prev => prev.filter(r => String(r._id) !== String(replyId)));
+            toast.success('Reply deleted');
+        } catch (err) {
+            toast.error(err?.message || 'Failed to delete reply');
+        }
     };
 
     // ── Loading State ──
@@ -621,13 +976,89 @@ export default function LessonPlayer() {
 
                             {activeTab === 'notes' && (
                                 <div className="space-y-4">
-                                    {currentLesson.description ? (
-                                        <p className="text-text-secondary leading-relaxed">{currentLesson.description}</p>
-                                    ) : (
-                                        <p className="text-text-secondary leading-relaxed">
-                                            No notes available for this lesson yet.
-                                        </p>
-                                    )}
+                                    <div className="bg-white rounded-xl p-4 border border-surface-border space-y-3">
+                                        <h4 className="text-sm font-bold text-text-primary">My Notes</h4>
+                                        <textarea
+                                            value={noteInput}
+                                            onChange={(event) => setNoteInput(event.target.value)}
+                                            onFocus={() => {
+                                                // Refresh the display when user focuses
+                                                setCurrentTime(getActualCurrentTime());
+                                            }}
+                                            onMouseEnter={() => {
+                                                // Also update when hovering
+                                                setCurrentTime(getActualCurrentTime());
+                                            }}
+                                            placeholder={isVideo ? `Write your note... (current time ${formatTimestamp(getActualCurrentTime())})` : 'Write your note...'}
+                                            className="w-full min-h-[96px] rounded-lg border border-surface-border p-3 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                                        />
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-xs text-text-muted">
+                                                {isVideo ? `Timestamp: ${formatTimestamp(getActualCurrentTime())} (${Math.floor(getActualCurrentTime() || 0)}s)` : 'Timestamp is available for video lessons'}
+                                            </p>
+                                            <Button
+                                                size="sm"
+                                                className="bg-primary-600 text-white hover:bg-primary-700"
+                                                disabled={notesSaving}
+                                                onClick={handleSaveNote}
+                                            >
+                                                {notesSaving ? 'Saving...' : 'Save Note'}
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-surface-muted rounded-xl p-4 border border-surface-border space-y-3">
+                                        <h4 className="text-sm font-bold text-text-primary">Saved Notes</h4>
+
+                                        {notesLoading && <p className="text-sm text-text-muted">Loading notes...</p>}
+                                        {!notesLoading && notesError && <p className="text-sm text-rose-600">{notesError}</p>}
+
+                                        {!notesLoading && !notesError && notes.length === 0 && (
+                                            <p className="text-sm text-text-muted">No notes yet for this lesson.</p>
+                                        )}
+
+                                        {!notesLoading && !notesError && notes.length > 0 && (
+                                            <div className="space-y-2">
+                                                {notes.map((note) => {
+                                                    const noteId = note._id || note.id;
+                                                    const hasTimestamp = Number.isFinite(Number(note?.timestamp)) && Number(note.timestamp) >= 0;
+                                                    return (
+                                                        <div
+                                                            key={noteId}
+                                                            className="rounded-lg border border-surface-border bg-white p-3 flex items-start justify-between gap-3"
+                                                        >
+                                                            <button
+                                                                type="button"
+                                                                className="text-left flex-1"
+                                                                onClick={() => {
+                                                                    if (hasTimestamp) {
+                                                                        seekToTimestamp(Number(note.timestamp));
+                                                                        toast.success(`Seeked to ${formatTimestamp(note.timestamp)}`);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <p className="text-sm text-text-primary whitespace-pre-wrap">{note.content}</p>
+                                                                <p className="text-xs text-text-muted mt-2">
+                                                                    {hasTimestamp
+                                                                        ? `${formatTimestamp(note.timestamp)} (${Math.floor(Number(note.timestamp))}s)`
+                                                                        : 'No timestamp'}
+                                                                </p>
+                                                            </button>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="text-rose-600 border-rose-200 hover:bg-rose-50"
+                                                                onClick={() => handleDeleteNote(noteId)}
+                                                            >
+                                                                Delete
+                                                            </Button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+
                                     <div className="bg-surface-muted rounded-xl p-4 border border-surface-border">
                                         <h4 className="text-sm font-bold text-text-primary mb-2 flex items-center gap-2">
                                             <HiBookmark className="text-amber-500" /> Lesson Info
@@ -635,11 +1066,11 @@ export default function LessonPlayer() {
                                         <ul className="text-sm text-text-secondary space-y-2">
                                             <li className="flex items-center gap-2">
                                                 <HiClock className="w-4 h-4 text-slate-400" />
-                                                Duration: {currentLesson.duration || 'N/A'}
+                                                Duration: {isVideo && duration > 0 ? formatDuration(duration) : currentLesson.duration || 'N/A'}
                                             </li>
                                             <li className="flex items-center gap-2">
                                                 <HiDocumentText className="w-4 h-4 text-slate-400" />
-                                                Type: <Badge color={isVideo ? 'blue' : 'rose'} className="text-[10px]">{currentLesson.type?.toUpperCase()}</Badge>
+                                                Type: <Badge color={isVideo ? 'blue' : 'rose'} className="text-[10px]">{String(currentLesson.type || lessonType || '').toUpperCase()}</Badge>
                                             </li>
                                             <li className="flex items-center gap-2">
                                                 <HiAcademicCap className="w-4 h-4 text-slate-400" />
@@ -673,11 +1104,38 @@ export default function LessonPlayer() {
                             )}
 
                             {activeTab === 'discussion' && (
-                                <div className="text-center py-8 space-y-3">
-                                    <HiChatAlt className="w-10 h-10 text-slate-300 mx-auto" />
-                                    <p className="text-sm font-medium text-text-secondary">Discussion feature coming soon!</p>
-                                    <p className="text-xs text-text-muted">Use the Messages tab to ask your instructor directly.</p>
-                                </div>
+                                <>
+                                    {!selectedDiscussion ? (
+                                        <DiscussionList
+                                            discussions={discussions}
+                                            loading={discussionsLoading}
+                                            error={discussionsError}
+                                            sortBy={discussionSortBy}
+                                            onSortChange={setDiscussionSortBy}
+                                            onSelectDiscussion={setSelectedDiscussion}
+                                            onCreateNew={() => setShowCreateModal(true)}
+                                            onUpvote={handleUpvoteDiscussion}
+                                        />
+                                    ) : (
+                                        <DiscussionDetail
+                                            discussion={selectedDiscussion}
+                                            replies={replies}
+                                            currentUserId={currentUser?._id || currentUser?.id}
+                                            currentUserRole={currentUser?.role || 'learner'}
+                                            loading={false}
+                                            repliesLoading={repliesLoading}
+                                            error={null}
+                                            onBack={() => setSelectedDiscussion(null)}
+                                            onAddReply={handleAddReply}
+                                            onUpvoteReply={handleUpvoteReply}
+                                            onMarkBestAnswer={handleMarkBestAnswer}
+                                            onDeleteReply={handleDeleteReply}
+                                            onUpvoteDiscussion={handleUpvoteDiscussion}
+                                            onResolveDiscussion={handleResolveDiscussion}
+                                            onDeleteDiscussion={handleDeleteDiscussion}
+                                        />
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>
@@ -775,6 +1233,14 @@ export default function LessonPlayer() {
                         <HiMenu className="w-5 h-5" />
                     </button>
                 )}
+
+                {/* Create Discussion Modal */}
+                <CreateDiscussionModal
+                    isOpen={showCreateModal}
+                    onClose={() => setShowCreateModal(false)}
+                    onSubmit={handleCreateDiscussion}
+                    loading={creatingDiscussion}
+                />
             </div>
         </div>
     );

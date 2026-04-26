@@ -6,7 +6,7 @@ import {
     HiPencil, HiTrash, HiDotsVertical, HiEye,
     HiTrendingUp, HiUsers, HiStar, HiDocumentDuplicate, HiArchive, HiLightningBolt
 } from 'react-icons/hi';
-import { mockCourses } from '../../data/mockData';
+
 import { ROUTES } from '../../constants/routes';
 import { Link } from 'react-router-dom';
 import Button from '../../components/ui/Button';
@@ -29,7 +29,7 @@ export default function CourseManagement() {
     const [openActionMenuId, setOpenActionMenuId] = useState(null);
 
     // Add local state so we can actually mutate the course list
-    const [instructorCourses, setInstructorCourses] = useState(mockCourses);
+    const [instructorCourses, setInstructorCourses] = useState([]);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
 

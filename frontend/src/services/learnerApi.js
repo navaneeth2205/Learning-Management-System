@@ -17,6 +17,28 @@ export const unenrollFromCourse = (courseId) => api.delete(`/enrollments/${cours
 export const fetchLessonsByCourse = (courseId) => api.get(`/lessons/course/${courseId}`).then(unwrap);
 export const fetchLessonById = (lessonId) => api.get(`/lessons/${lessonId}`).then(unwrap);
 
+// ── Notes ──
+export const createNote = (payload) => api.post('/notes', payload).then(unwrap);
+export const fetchNotesByLesson = (lessonId) => api.get(`/notes/${lessonId}`).then(unwrap);
+export const deleteNote = (noteId) => api.delete(`/notes/${noteId}`).then(unwrap);
+
+// ── Discussions (Q&A Forum) ──
+export const createDiscussionThread = (payload) => api.post('/discussions', payload).then(unwrap);
+export const fetchDiscussionsByLesson = (lessonId, sortBy = 'latest') =>
+    api.get(`/discussions/lesson/${lessonId}`, { params: { sortBy } }).then(unwrap);
+export const fetchDiscussionById = (discussionId) => api.get(`/discussions/${discussionId}`).then(unwrap);
+export const upvoteDiscussion = (discussionId) => api.put(`/discussions/${discussionId}/upvote`).then(unwrap);
+export const resolveDiscussion = (discussionId) => api.put(`/discussions/${discussionId}/resolve`).then(unwrap);
+export const deleteDiscussionThread = (discussionId) => api.delete(`/discussions/${discussionId}`).then(unwrap);
+
+// ── Discussion Replies ──
+export const createDiscussionReply = (payload) => api.post('/discussions/reply/create', payload).then(unwrap);
+export const fetchRepliesByDiscussion = (discussionId) => api.get(`/discussions/reply/${discussionId}`).then(unwrap);
+export const upvoteReply = (replyId) => api.put(`/discussions/reply/${replyId}/upvote`).then(unwrap);
+export const markBestAnswer = (replyId, discussionId) =>
+    api.put(`/discussions/reply/${replyId}/best`, { discussionId }).then(unwrap);
+export const deleteDiscussionReply = (replyId) => api.delete(`/discussions/reply/${replyId}`).then(unwrap);
+
 // ── Assignments ──
 export const fetchMyAssignments = () => api.get('/assignments/me').then(unwrap);
 export const fetchAssignmentsByCourse = (courseId) => api.get(`/assignments/course/${courseId}`).then(unwrap);
@@ -50,7 +72,7 @@ export const verifyCertificate = (certNumber) => api.get(`/certificates/verify/$
 
 // ── Community / Discussions ──
 export const fetchDiscussions = (params = {}) => api.get('/community', { params }).then(unwrap);
-export const fetchDiscussionById = (discussionId) => api.get(`/community/${discussionId}`).then(unwrap);
+export const fetchCommunityDiscussionById = (discussionId) => api.get(`/community/${discussionId}`).then(unwrap);
 export const createDiscussion = (payload) => api.post('/community', payload).then(unwrap);
 export const addReply = (discussionId, content) => api.post(`/community/${discussionId}/reply`, { content }).then(unwrap);
 export const toggleLike = (discussionId) => api.post(`/community/${discussionId}/like`).then(unwrap);

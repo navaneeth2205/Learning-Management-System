@@ -15,6 +15,7 @@ import { fetchCourseDetails, enrollInCourse, checkEnrollment, sendMessageAPI, fe
 import CallModal from '../../components/communication/CallModal';
 import { useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
+import { formatDuration } from '../../utils/formatDuration';
 
 export default function CourseDetail() {
     const { courseId } = useParams();
@@ -289,7 +290,7 @@ export default function CourseDetail() {
                                         <p className="text-sm font-bold text-text-primary">This course includes:</p>
                                         <ul className="space-y-2">
                                             {[
-                                                { icon: HiPlay, text: `${c.duration || 'Video'} content` },
+                                                { icon: HiPlay, text: `${typeof c.duration === 'number' ? formatDuration(c.duration) : (c.duration || 'Video')} content` },
                                                 { icon: HiAcademicCap, text: `${lessonCount} lessons` },
                                                 { icon: HiDocumentText, text: 'Downloadable resources' },
                                                 { icon: HiOutlineBadgeCheck, text: 'Certificate of completion' },
@@ -354,7 +355,11 @@ export default function CourseDetail() {
                                                                 </div>
                                                                 <div>
                                                                     <p className="text-sm font-medium text-text-secondary truncate">{lesson.title}</p>
-                                                                    {lesson.duration && <p className="text-xs text-text-muted">{lesson.duration}</p>}
+                                                                    {lesson.duration && (
+                                                                        <p className="text-xs text-text-muted">
+                                                                            {typeof lesson.duration === 'number' ? formatDuration(lesson.duration) : lesson.duration}
+                                                                        </p>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-4 text-xs text-text-muted">

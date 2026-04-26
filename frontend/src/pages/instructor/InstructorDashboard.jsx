@@ -12,7 +12,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip, ResponsiveContainer, AreaChart, Area, Cell
 } from 'recharts';
-import { mockCourses, mockInstructorStats } from '../../data/mockData';
+
 import { ROUTES } from '../../constants/routes';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -51,7 +51,7 @@ export default function InstructorDashboard() {
     const statsItems = [
         { label: 'Total Enrollments', value: 4200, icon: HiUsers, color: 'violet', prefix: '', gradient: 'from-violet-500 to-indigo-600' },
         { label: 'Avg Attendance', value: 92, icon: HiPresentationChartLine, color: 'blue', suffix: '%', gradient: 'from-blue-500 to-cyan-600' },
-        { label: 'Pending Assessment', value: mockInstructorStats.pendingGrading, icon: HiClipboardList, color: 'rose', gradient: 'from-rose-500 to-pink-600' },
+        { label: 'Pending Assessment', value: 0, icon: HiClipboardList, color: 'rose', gradient: 'from-rose-500 to-pink-600' },
         { label: 'Student Rating', value: 4.9, icon: HiStar, color: 'amber', isFloat: true, gradient: 'from-amber-400 to-orange-500' },
     ];
 
@@ -101,7 +101,7 @@ export default function InstructorDashboard() {
         { name: 'Course D', completion: 65, dropoff: 35 },
     ];
 
-    const instructorCourses = mockCourses.slice(0, 3);
+    const instructorCourses = [];
 
     return (
         <div className="space-y-10 animate-fade-in">

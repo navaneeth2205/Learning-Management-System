@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { HiOutlineClock, HiMenu, HiChevronLeft, HiChevronRight, HiFlag, HiX, HiOutlineFlag } from 'react-icons/hi';
-import { mockQuizzes } from '../../mock/mockQuizzes';
+import { fetchQuizById } from '../../services/learnerApi';
 import { startAttempt, setAnswer, toggleFlag, submitAttempt } from '../../features/quiz/quizSlice';
 import { useTimer } from '../../hooks/useTimer';
 import Button from '../../components/ui/Button';
@@ -16,7 +16,16 @@ export default function QuizAttempt() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
 
-    const quiz = useMemo(() => mockQuizzes.find(q => q.id === id), [id]);
+    const [quiz, setQuiz] = useState(null);
+    const [quizLoading, setQuizLoading] = useState(true);
+
+    useEffect(() => {
+        fetchQuizById(id)
+            .then(data => setQuiz(data))
+            .catch(() => setQuiz(null))
+            .finally(() => setQuizLoading(false));
+    }, [id]);
+
     const { currentAttempt } = useSelector(s => s.quiz);
 
     const [hasStarted, setHasStarted] = useState(false);

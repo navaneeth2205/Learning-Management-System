@@ -17,6 +17,8 @@ import announcementRoutes from '../modules/announcement/announcement.routes.js';
 import dashboardRoutes from '../modules/dashboard/dashboard.routes.js';
 import messageAccessRoutes from '../modules/message-access/messageAccess.routes.js';
 import agoraRoutes from '../modules/agora/agora.routes.js';
+import noteRoutes from '../modules/note/note.routes.js';
+import discussionRoutes from '../modules/discussion/discussion.routes.js';
 
 const router = express.Router();
 
@@ -43,6 +45,8 @@ router.get('/', (req, res) => {
 			'/api/agora',
 			'/api/announcements',
 			'/api/dashboard',
+			'/api/notes',
+			'/api/discussions',
 		],
 	});
 });
@@ -72,5 +76,7 @@ router.use('/messages', messageRoutes);
 router.use('/agora', agoraRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/notes', noteRoutes);
+router.use('/discussions', discussionRoutes);
 
 export default router;

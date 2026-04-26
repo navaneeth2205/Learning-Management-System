@@ -6,7 +6,7 @@ import {
     HiCollection
 } from 'react-icons/hi';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 'recharts';
-import { mockCourses, mockLearnerStats, mockSkills, mockDailyGoal } from '../../data/mockData';
+
 import { ROUTES } from '../../constants/routes';
 import { Link, useNavigate } from 'react-router-dom';
 import ProgressBar from '../../components/ui/ProgressBar';
@@ -43,13 +43,13 @@ export default function LearnerDashboard() {
         loadDashboard();
     }, []);
 
-    // Use live data or fallback to mock
-    const enrolledCount = stats?.enrolledCourses ?? mockLearnerStats.enrolledCourses;
-    const completedCount = stats?.completedCourses ?? mockLearnerStats.completedCourses;
-    const certCount = stats?.certificates ?? mockLearnerStats.certificates;
-    const avgScore = stats?.avgScore ?? mockLearnerStats.avgScore;
+    // Use live data with 0 defaults
+    const enrolledCount = stats?.enrolledCourses ?? 0;
+    const completedCount = stats?.completedCourses ?? 0;
+    const certCount = stats?.certificates ?? 0;
+    const avgScore = stats?.avgScore ?? 0;
 
-    // Active course from enrollments or fallback
+    // Active course from enrollments only
     const activeCourse = useMemo(() => {
         if (stats?.enrollments?.length > 0) {
             const inProgress = stats.enrollments.find(e => e.progress > 0 && e.progress < 100);
@@ -73,16 +73,16 @@ export default function LearnerDashboard() {
                 };
             }
         }
-        return mockCourses.find(c => c.progress > 0 && c.progress < 100) || mockCourses[0];
+        return null;
     }, [stats]);
 
-    // Recommended courses (live or mock)
+    // Recommended courses (live only)
     const recommended = useMemo(() => {
         if (liveCourses.length > 0) {
             const enrolledIds = new Set((stats?.enrollments || []).map(e => e.courseId?._id?.toString()));
             return liveCourses.filter(c => !enrolledIds.has(c._id?.toString()));
         }
-        return mockCourses.filter(c => c.progress === undefined || c.progress === 0);
+        return [];
     }, [liveCourses, stats]);
 
     const chartData = [
@@ -110,7 +110,7 @@ export default function LearnerDashboard() {
         ];
     }, [leaderboardData]);
 
-    const courseId = activeCourse?._id || activeCourse?.id || 1;
+    const courseId = activeCourse?._id || activeCourse?.id || null;
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
@@ -174,30 +174,46 @@ export default function LearnerDashboard() {
                         <Link to={ROUTES.LEARNER_MY_LEARNING} className="text-sm font-bold text-primary-500 hover:underline">See All</Link>
                     </div>
 
-                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md flex flex-col md:flex-row items-center gap-6">
-                        <div className="w-full md:w-32 h-24 rounded-lg overflow-hidden flex-shrink-0">
-                            <img
-                                src={activeCourse.thumbnail || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800&auto=format&fit=crop'}
-                                alt=""
-                                className="w-full h-full object-cover"
-                            />
-                        </div>
-                        <div className="flex-1 space-y-2 text-center md:text-left">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-primary-500">{activeCourse.category || 'Course'}</span>
-                            <h4 className="text-lg font-black text-gray-800">{activeCourse.title}</h4>
-                            <div className="flex items-center gap-3">
-                                <span className="text-xs text-gray-600 font-bold">Progress</span>
-                                <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden max-w-[200px]">
-                                    <div className="h-full bg-primary-500 rounded-full" style={{ width: `${activeCourse.progress || 0}%` }} />
+                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md flex flex-col md:flex-row items-center gap-6">
+                            {activeCourse ? (
+                                <>
+                                    <div className="w-full md:w-32 h-24 rounded-lg overflow-hidden flex-shrink-0">
+                                        <img
+                                            src={activeCourse.thumbnail || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800&auto=format&fit=crop'}
+                                            alt=""
+                                            className="w-full h-full object-cover"
+                                        />
+                                    </div>
+                                    <div className="flex-1 space-y-2 text-center md:text-left">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-primary-500">{activeCourse.category || 'Course'}</span>
+                                        <h4 className="text-lg font-black text-gray-800">{activeCourse.title}</h4>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs text-gray-600 font-bold">Progress</span>
+                                            <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden max-w-[200px]">
+                                                <div className="h-full bg-primary-500 rounded-full" style={{ width: `${activeCourse.progress || 0}%` }} />
+                                            </div>
+                                            <span className="text-xs font-bold text-primary-500">{activeCourse.progress || 0}%</span>
+                                        </div>
+                                    </div>
+                                    {courseId && (
+                                        <Link to={`/learner/courses/${courseId}/lessons/1`}>
+                                            <Button className="bg-primary-500 text-white px-8 rounded-xl font-bold h-12 shadow-lg shadow-indigo-100 whitespace-nowrap">
+                                                Resume Course
+                                            </Button>
+                                        </Link>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="w-full text-center py-6">
+                                    <h4 className="text-lg font-black text-gray-800">No active course yet</h4>
+                                    <p className="text-sm text-gray-600 font-medium mt-2">Enroll in a course to start learning.</p>
+                                    <Link to={ROUTES.LEARNER_BROWSE}>
+                                        <Button className="mt-4 bg-primary-500 text-white px-8 rounded-xl font-bold h-12 shadow-lg shadow-indigo-100 whitespace-nowrap">
+                                            Browse Courses
+                                        </Button>
+                                    </Link>
                                 </div>
-                                <span className="text-xs font-bold text-primary-500">{activeCourse.progress || 0}%</span>
-                            </div>
-                        </div>
-                        <Link to={`/learner/courses/${courseId}/lessons/1`}>
-                            <Button className="bg-primary-500 text-white px-8 rounded-xl font-bold h-12 shadow-lg shadow-indigo-100 whitespace-nowrap">
-                                Resume Course
-                            </Button>
-                        </Link>
+                            )}
                     </div>
                 </section>
 
@@ -246,6 +262,14 @@ export default function LearnerDashboard() {
                                     </Link>
                                 );
                             })}
+                            {recommended.length === 0 && (
+                                <div className="md:col-span-2 bg-white rounded-xl border border-dashed border-gray-200 p-8 text-center">
+                                    <p className="text-gray-600 font-medium">No course suggestions right now.</p>
+                                    <Link to={ROUTES.LEARNER_BROWSE} className="inline-block mt-4">
+                                        <Button className="bg-primary-500 text-white px-6 rounded-xl font-bold h-11">Browse Catalog</Button>
+                                    </Link>
+                                </div>
+                            )}
                         </div>
                     </section>
 
@@ -254,26 +278,10 @@ export default function LearnerDashboard() {
                         <div className="flex items-center justify-between">
                             <h2 className="text-xl font-black text-gray-800 tracking-tight">Skill Progress</h2>
                         </div>
-                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md h-[400px] flex flex-col justify-between">
-                            <div className="space-y-6 overflow-y-auto pr-2 custom-scrollbar text-primary">
-                                {mockSkills.map((skill, i) => (
-                                    <div key={i} className="space-y-3 group">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{skill.name}</span>
-                                            <span className="text-xs font-black text-primary-500">{skill.level}%</span>
-                                        </div>
-                                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full bg-primary-500 rounded-full transition-all duration-1000 ease-out group-hover:brightness-110"
-                                                style={{ width: `${skill.level}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="pt-4 border-t border-gray-50 mt-4">
-                                <p className="text-[11px] text-gray-400 font-bold text-center italic">Level up your skills daily</p>
-                            </div>
+                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md h-[400px] flex flex-col items-center justify-center text-center gap-3">
+                            <span className="text-4xl">🎯</span>
+                            <p className="text-sm font-bold text-gray-500">Skill tracking coming soon</p>
+                            <p className="text-xs text-gray-400">Complete courses and quizzes to build your skill profile.</p>
                         </div>
                     </section>
                 </div>
@@ -286,34 +294,32 @@ export default function LearnerDashboard() {
                 <div className="bg-primary-50 p-1.5 rounded-2xl border border-primary-100 shadow-sm">
                     <div className="bg-white p-6 rounded-xl space-y-6">
                         <div className="flex items-center justify-between">
-                            <h4 className="font-black text-gray-800">Today's Goal</h4>
-                            <span className="px-2 py-1 bg-primary-50 text-primary-600 rounded text-[10px] font-black uppercase tracking-widest">Active</span>
+                            <h4 className="font-black text-gray-800">Learning Progress</h4>
+                            <span className="px-2 py-1 bg-primary-50 text-primary-600 rounded text-[10px] font-black uppercase tracking-widest">Live</span>
                         </div>
-
                         <div className="flex items-center gap-6">
                             <div className="relative w-24 h-24 shrink-0">
                                 <svg className="w-full h-full transform -rotate-90">
+                                    <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-100" />
                                     <circle
-                                        cx="48" cy="48" r="40"
-                                        stroke="currentColor" strokeWidth="8"
-                                        fill="transparent" className="text-slate-100"
-                                    />
-                                    <circle
-                                        cx="48" cy="48" r="40"
-                                        stroke="currentColor" strokeWidth="8"
+                                        cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8"
                                         fill="transparent" className="text-primary-500"
                                         strokeDasharray={251.2}
-                                        strokeDashoffset={251.2 * (1 - mockDailyGoal.percentage / 100)}
+                                        strokeDashoffset={251.2 * (1 - Math.min((completedCount / Math.max(enrolledCount, 1)), 1))}
                                         strokeLinecap="round"
                                     />
                                 </svg>
                                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                    <span className="text-xl font-black text-gray-800 leading-none">{mockDailyGoal.percentage}%</span>
+                                    <span className="text-xl font-black text-gray-800 leading-none">
+                                        {enrolledCount > 0 ? Math.round((completedCount / enrolledCount) * 100) : 0}%
+                                    </span>
                                 </div>
                             </div>
                             <div className="space-y-1">
-                                <p className="text-2xl font-black text-gray-800">{mockDailyGoal.completed}<span className="text-sm text-gray-400 ml-1">/ {mockDailyGoal.target} hrs</span></p>
-                                <p className="text-xs font-black text-primary-500 uppercase tracking-widest">{mockDailyGoal.message}</p>
+                                <p className="text-2xl font-black text-gray-800">{completedCount}<span className="text-sm text-gray-400 ml-1">/ {enrolledCount} courses</span></p>
+                                <p className="text-xs font-black text-primary-500 uppercase tracking-widest">
+                                    {completedCount === 0 ? 'Start learning!' : completedCount === enrolledCount ? 'All done! 🎉' : 'Keep going!'}
+                                </p>
                             </div>
                         </div>
                     </div>

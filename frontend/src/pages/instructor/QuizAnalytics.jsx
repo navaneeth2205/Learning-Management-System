@@ -1,29 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { HiChevronLeft, HiDownload, HiUser } from 'react-icons/hi';
-import { mockQuizzes } from '../../mock/mockQuizzes';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import { fetchQuizById } from '../../services/instructorApi';
 
 export default function QuizAnalytics() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const quiz = mockQuizzes.find(q => q.id === id);
+    const [quiz, setQuiz] = useState(null);
+    const [loading, setLoading] = useState(true);
 
-    const stats = { avgScore: 82, passRate: 94, totalAttempts: 124, avgTime: '18m 42s' };
+    useEffect(() => {
+        fetchQuizById(id)
+            .then(data => setQuiz(data))
+            .catch(() => setQuiz(null))
+            .finally(() => setLoading(false));
+    }, [id]);
 
-    const questionStats = quiz?.questions.map((q, i) => ({
-        idx: i + 1,
-        text: q.text,
-        accuracy: Math.floor(Math.random() * 60) + 40
-    })) || [];
+    const stats = { avgScore: 0, passRate: 0, totalAttempts: 0, avgTime: 'N/A' };
+    const questionStats = (quiz?.questions || []).map((q, i) => ({ idx: i + 1, text: q.text, accuracy: 0 }));
+    const scoreDist = Array.from({ length: 10 }, (_, i) => ({ range: `${i * 10}-${i * 10 + 9}`, count: 0 }));
 
-    const scoreDist = Array.from({ length: 10 }, (_, i) => ({
-        range: `${i * 10}-${i * 10 + 9}`,
-        count: i < 5 ? Math.floor(Math.random() * 5) : Math.floor(Math.random() * 40)
-    }));
-
-    if (!quiz) return <div className="p-10 font-bold">Quiz Note Found</div>;
+    if (loading) return <div className="p-10 font-bold text-slate-500">Loading analytics...</div>;
+    if (!quiz) return <div className="p-10 font-bold text-rose-500">Quiz not found</div>;
 
     return (
         <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8 bg-slate-50 min-h-screen pb-24">

@@ -5,29 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import SearchBar from '../../components/ui/SearchBar';
-import { mockQuizzes } from '../../mock/mockQuizzes';
+
 import { fetchInstructorQuizzes, fetchMyAssignments } from '../../services/instructorApi';
 
-const mockAssignments = [
-    {
-        id: 1,
-        title: 'Design Case Study',
-        course: 'UI/UX Design Masterclass',
-        dueDate: 'Oct 25, 2023',
-        totalMarks: 100,
-        submissions: 42,
-        status: 'Active'
-    },
-    {
-        id: 2,
-        title: 'React Hooks Deep Dive',
-        course: 'Advanced React Patterns',
-        dueDate: 'Nov 02, 2023',
-        totalMarks: 50,
-        submissions: 18,
-        status: 'Draft'
-    }
-];
+
 
 export default function InstructorQuizzes() {
     const navigate = useNavigate();
@@ -38,8 +19,8 @@ export default function InstructorQuizzes() {
 
     // Outside click ref for Create Dropdown
     const dropdownRef = useRef(null);
-    const [quizzes, setQuizzes] = useState(mockQuizzes);
-    const [assignments, setAssignments] = useState(mockAssignments);
+    const [quizzes, setQuizzes] = useState([]);
+    const [assignments, setAssignments] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
