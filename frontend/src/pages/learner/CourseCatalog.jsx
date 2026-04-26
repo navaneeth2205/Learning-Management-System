@@ -12,7 +12,7 @@ import SearchBar from '../../components/ui/SearchBar';
 import Select from '../../components/ui/Select';
 import Pagination from '../../components/ui/Pagination';
 import Badge from '../../components/ui/Badge';
-import { fetchCourses, enrollInCourse, checkEnrollment } from '../../services/learnerApi';
+import { fetchCourses, enrollInCourse, fetchMyEnrollments } from '../../services/learnerApi';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 
@@ -26,6 +26,7 @@ export default function CourseCatalog() {
     const [liveCourses, setLiveCourses] = useState([]);
     const [loading, setLoading] = useState(true);
     const [enrollingId, setEnrollingId] = useState(null);
+    const [enrolledCourseIds, setEnrolledCourseIds] = useState(new Set());
 
     useEffect(() => {
         const queryParams = new URLSearchParams(location.search);
@@ -42,8 +43,18 @@ export default function CourseCatalog() {
                 if (category !== 'All') params.category = category;
                 if (difficulty !== 'All') params.difficulty = difficulty;
                 if (search) params.search = search;
-                const data = await fetchCourses(params);
+                
+                const [data, myEnrollments] = await Promise.all([
+                    fetchCourses(params),
+                    token ? fetchMyEnrollments().catch(() => []) : Promise.resolve([])
+                ]);
+                
                 setLiveCourses(data);
+                
+                if (myEnrollments && myEnrollments.length > 0) {
+                    const ids = new Set(myEnrollments.map(e => String(e.courseId?._id || e.courseId)));
+                    setEnrolledCourseIds(ids);
+                }
             } catch {
                 // fallback to mock
                 setLiveCourses([]);
@@ -99,6 +110,7 @@ export default function CourseCatalog() {
             setEnrollingId(courseId);
             await enrollInCourse(courseId);
             toast.success('Enrolled successfully!');
+            setEnrolledCourseIds(prev => new Set([...prev, String(courseId)]));
         } catch (err) {
             toast.error(err.message || 'Failed to enroll');
         } finally {
@@ -213,15 +225,28 @@ export default function CourseCatalog() {
                                             View Details
                                         </Button>
                                     </Link>
-                                    <Button
-                                        fullWidth
-                                        size="sm"
-                                        className="py-2 font-black uppercase tracking-widest text-[10px] shadow-md hover:shadow-lg transition-all rounded-lg"
-                                        onClick={() => handleEnroll(course._id || course.id)}
-                                        disabled={enrollingId === (course._id || course.id)}
-                                    >
-                                        {enrollingId === (course._id || course.id) ? 'Enrolling...' : 'Enroll Now'}
-                                    </Button>
+                                    {enrolledCourseIds.has(String(course._id || course.id)) ? (
+                                        <Link to={`/learner/courses/${course._id || course.id}`}>
+                                            <Button
+                                                fullWidth
+                                                size="sm"
+                                                className="py-2 font-black uppercase tracking-widest text-[10px] shadow-md transition-all rounded-lg border-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                                                variant="outline"
+                                            >
+                                                Already Enrolled
+                                            </Button>
+                                        </Link>
+                                    ) : (
+                                        <Button
+                                            fullWidth
+                                            size="sm"
+                                            className="py-2 font-black uppercase tracking-widest text-[10px] shadow-md hover:shadow-lg transition-all rounded-lg"
+                                            onClick={() => handleEnroll(course._id || course.id)}
+                                            disabled={enrollingId === (course._id || course.id)}
+                                        >
+                                            {enrollingId === (course._id || course.id) ? 'Enrolling...' : 'Enroll Now'}
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         </div>

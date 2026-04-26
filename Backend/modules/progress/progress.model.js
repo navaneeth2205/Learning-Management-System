@@ -19,6 +19,12 @@ const progressModelSchema = new mongoose.Schema(
 			max: 100,
 			default: 0,
 		},
+		completedLessons: [
+			{
+				type: mongoose.Schema.Types.ObjectId,
+				ref: 'Lesson',
+			},
+		],
 	},
 	{
 		versionKey: false,

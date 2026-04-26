@@ -81,7 +81,7 @@ export default function AppRouter() {
             >
                 <Route index element={<Navigate to={ROUTES.LEARNER_DASHBOARD} replace />} />
                 <Route path="dashboard" element={<LearnerDashboard />} />
-                <Route path="courses/:courseId/lessons/:lessonId" element={<LessonPlayer />} />
+                <Route path="courses/:courseId/lessons/:lessonOrder" element={<LessonPlayer />} />
                 <Route path="courses/:courseId" element={<CourseDetail />} />
                 <Route path="courses" element={<CourseCatalog />} />
                 <Route path="my-learning" element={<MyLearning />} />

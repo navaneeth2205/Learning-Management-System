@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 
 const SocketContext = createContext(null);
 
-const SOCKET_URL = import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://127.0.0.1:5000';
+const SOCKET_URL = import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
 
 export function SocketProvider({ children }) {
     const { token } = useSelector(s => s.auth);
@@ -28,7 +28,7 @@ export function SocketProvider({ children }) {
         // Create socket connection with auth token
         const newSocket = io(SOCKET_URL, {
             auth: { token },
-            transports: ['websocket', 'polling'],
+            transports: ['polling', 'websocket'], // polling first for handshake, then upgrades to WS
             reconnection: true,
             reconnectionAttempts: 5,
             reconnectionDelay: 2000,

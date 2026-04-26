@@ -39,8 +39,8 @@ export const fetchMyQuizAttempts = (quizId) => api.get(`/quizzes/${quizId}/my-at
 
 // ── Progress ──
 export const fetchMyProgress = () => api.get('/progress/me').then(unwrap);
-export const updateProgress = (courseId, completionPercentage) =>
-    api.put('/progress', { courseId, completionPercentage }).then(unwrap);
+export const updateProgress = (courseId, lessonId) =>
+    api.put('/progress', { courseId, lessonId }).then(unwrap);
 
 // ── Certificates ──
 export const fetchMyCertificates = () => api.get('/certificates/me').then(unwrap);

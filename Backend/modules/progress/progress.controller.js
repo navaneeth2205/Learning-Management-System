@@ -7,7 +7,7 @@ export const updateProgressController = async (req, res, next) => {
 		const progress = await upsertProgress({
 			userId: req.user._id,
 			courseId: req.body.courseId,
-			completionPercentage: req.body.completionPercentage,
+			lessonId: req.body.lessonId,
 		});
 
 		return successResponse(res, {

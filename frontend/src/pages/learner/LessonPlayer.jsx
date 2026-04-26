@@ -4,7 +4,7 @@ import {
     HiChevronLeft, HiChevronRight, HiCheckCircle,
     HiPlay, HiDocumentText, HiBookmark, HiChatAlt,
     HiMenu, HiX, HiAcademicCap, HiClock, HiPause,
-    HiClipboardList, HiDownload, HiExternalLink
+    HiClipboardList, HiDownload, HiExternalLink, HiLockClosed, HiArrowsExpand
 } from 'react-icons/hi';
 import { ROUTES } from '../../constants/routes';
 import Button from '../../components/ui/Button';
@@ -12,13 +12,17 @@ import Badge from '../../components/ui/Badge';
 import Avatar from '../../components/ui/Avatar';
 import clsx from 'clsx';
 import confetti from 'canvas-confetti';
-import { fetchLessonById, fetchLessonsByCourse, fetchCourseById } from '../../services/learnerApi';
+import { fetchLessonsByCourse, fetchCourseById, updateProgress, fetchMyProgress } from '../../services/learnerApi';
 import toast from 'react-hot-toast';
+import ReactPlayer from 'react-player';
 
 export default function LessonPlayer() {
-    const { courseId, lessonId } = useParams();
+    const { courseId, lessonOrder } = useParams();
+    const lessonOrderNum = Number(lessonOrder);
     const navigate = useNavigate();
     const videoRef = useRef(null);
+    const playerRef = useRef(null);       // ReactPlayer ref
+    const playerContainerRef = useRef(null); // outer container for fullscreen
 
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [activeTab, setActiveTab] = useState('notes');
@@ -36,24 +40,133 @@ export default function LessonPlayer() {
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [canComplete, setCanComplete] = useState(false);
+    const [playbackRate, setPlaybackRate] = useState(1);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+    
+    // Strict watch time tracking
+    const watchTimeRef = useRef(0);
+    const lastTimeRef = useRef(0);
+    const hasCompletedRef = useRef(false);
+
+    // Completed lessons state
+    const [completedLessons, setCompletedLessons] = useState(new Set());
 
     const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://127.0.0.1:5000';
 
-    // Load course, lesson, and all lessons from DB
+    const resolveLessonRawUrl = (lesson) => {
+        if (!lesson) return '';
+        const candidate = lesson.contentUrl || lesson.videoUrl || lesson.fileUrl || lesson.url || '';
+        return String(candidate || '').trim();
+    };
+
+    const inferLessonType = (lesson) => {
+        const explicitType = String(lesson?.type || '').toLowerCase().trim();
+        if (explicitType === 'video' || explicitType === 'pdf') return explicitType;
+
+        const rawUrl = resolveLessonRawUrl(lesson).toLowerCase();
+        if (!rawUrl) return 'video';
+        if (rawUrl.includes('youtube.com') || rawUrl.includes('youtu.be')) return 'video';
+        if (rawUrl.endsWith('.pdf')) return 'pdf';
+        return 'video';
+    };
+
+    // Fullscreen change listener + F key shortcut
+    useEffect(() => {
+        const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', onFsChange);
+
+        const onKeyDown = (e) => {
+            // Only trigger when not typing in an input/textarea
+            const tag = document.activeElement?.tagName?.toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+            if (e.key === 'f' || e.key === 'F') {
+                e.preventDefault();
+                if (!document.fullscreenElement) {
+                    playerContainerRef.current?.requestFullscreen();
+                } else {
+                    document.exitFullscreen();
+                }
+            }
+        };
+        document.addEventListener('keydown', onKeyDown);
+
+        return () => {
+            document.removeEventListener('fullscreenchange', onFsChange);
+            document.removeEventListener('keydown', onKeyDown);
+        };
+    }, []);
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            playerContainerRef.current?.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    };
+
+    const handleSpeedChange = (speed) => {
+        setPlaybackRate(speed);
+        setShowSpeedMenu(false);
+
+        if (videoRef.current) {
+            videoRef.current.playbackRate = speed;
+        }
+
+        // Also notify the YouTube internal player directly
+        try { playerRef.current?.getInternalPlayer()?.setPlaybackRate(speed); } catch (_) {}
+    };
+
+    // Load ALL lessons for the course sorted by order, plus course info and progress
     useEffect(() => {
         const loadData = async () => {
             setLoading(true);
             setError(null);
             try {
-                const [lessonData, lessonsData, courseData] = await Promise.all([
-                    fetchLessonById(lessonId),
+                const [lessonsData, courseData, progressData] = await Promise.all([
                     fetchLessonsByCourse(courseId),
                     fetchCourseById(courseId),
+                    fetchMyProgress().catch(() => null),
                 ]);
 
-                setCurrentLesson(lessonData);
-                setAllLessons(lessonsData || []);
+                // Sort lessons by order and normalize missing/invalid orders to a stable 1..N sequence
+                const sorted = (lessonsData || []).slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+                const normalized = sorted.map((lesson, index) => {
+                    const orderValue = Number(lesson.order);
+                    return {
+                        ...lesson,
+                        order: Number.isFinite(orderValue) && orderValue > 0 ? orderValue : index + 1,
+                    };
+                });
+                setAllLessons(normalized);
+
+                // Resolve route param as either lesson order or lesson id
+                const routeParam = String(lessonOrder || '').trim();
+                let lesson = null;
+
+                if (Number.isFinite(lessonOrderNum) && lessonOrderNum > 0) {
+                    lesson = normalized.find((l) => Number(l.order) === lessonOrderNum) || null;
+                }
+
+                if (!lesson && routeParam) {
+                    lesson = normalized.find((l) => String(l._id || l.id || '') === routeParam) || null;
+                }
+
+                if (!lesson) {
+                    lesson = normalized[0] || null;
+                }
+
+                if (!lesson) throw new Error('No lessons found for this course');
+                setCurrentLesson(lesson);
+
                 setCourse(courseData);
+
+                if (progressData) {
+                    const myProgress = progressData.find(p => String(p.courseId?._id || p.courseId) === String(courseId));
+                    if (myProgress && myProgress.completedLessons) {
+                        setCompletedLessons(new Set(myProgress.completedLessons.map(id => String(id))));
+                    }
+                }
             } catch (err) {
                 console.error('LessonPlayer load error:', err);
                 setError(err.message || 'Failed to load lesson data');
@@ -63,59 +176,96 @@ export default function LessonPlayer() {
             }
         };
         loadData();
-    }, [courseId, lessonId]);
+    }, [courseId, lessonOrderNum]);
 
-    // Reset player state on lesson change
+    // Reset player state on lesson order change
     useEffect(() => {
         setIsPlaying(false);
         setCurrentTime(0);
         setDuration(0);
-        setCanComplete(false);
+        
+        watchTimeRef.current = 0;
+        lastTimeRef.current = 0;
+        hasCompletedRef.current = false;
+        
+        // If they already completed this lesson previously, unlock completion button instantly
+        const lessonId = currentLesson?._id;
+        if (lessonId && completedLessons.has(String(lessonId))) {
+            setCanComplete(true);
+            hasCompletedRef.current = true;
+        } else {
+            setCanComplete(false);
+        }
+        
         setIsBookmarked(false);
-    }, [lessonId]);
+    }, [lessonOrderNum, completedLessons, currentLesson]);
 
-    // Navigation helpers
-    const currentIndex = allLessons.findIndex(l => (l._id || l.id) === lessonId);
+    // Navigation helpers — use order numbers for URLs, not ObjectIds
+    const currentLessonOrder = Number(currentLesson?.order);
+    const currentIndex = allLessons.findIndex(l => Number(l.order) === currentLessonOrder);
     const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
     const nextLesson = currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
+
+    const goToLesson = (lesson) => {
+        if (lesson) navigate(`/learner/courses/${courseId}/lessons/${lesson.order}`);
+    };
 
     // Progress
     const progressPercent = allLessons.length > 0
         ? Math.round(((currentIndex + 1) / allLessons.length) * 100)
         : 0;
 
-    // Video event handlers
-    const handleTimeUpdate = () => {
-        if (videoRef.current) {
-            setCurrentTime(videoRef.current.currentTime);
-            // Enable completion after watching 80% of the video
-            if (videoRef.current.currentTime >= videoRef.current.duration * 0.8) {
-                setCanComplete(true);
+    // Video event handlers for ReactPlayer
+    const handleProgress = (state) => {
+        const currentVideoTime = state.playedSeconds;
+        const delta = currentVideoTime - lastTimeRef.current;
+        
+        // Only add to watch time if the delta is positive and less than 2 seconds (not a seek)
+        if (delta > 0 && delta < 2) {
+            watchTimeRef.current += delta;
+        }
+        
+        lastTimeRef.current = currentVideoTime;
+        setCurrentTime(currentVideoTime);
+        
+        // Enable completion after genuinely watching 80% of the video
+        if (!hasCompletedRef.current && duration > 0 && watchTimeRef.current >= duration * 0.8) {
+            setCanComplete(true);
+            hasCompletedRef.current = true;
+        }
+    };
+
+    const handleDuration = (dur) => {
+        setDuration(dur);
+        lastTimeRef.current = 0; // Reset last time when video loads
+    };
+
+    const handleReady = (player) => {
+        playerRef.current = player;
+        // Get duration via the internal player API
+        try {
+            const dur = player.getDuration();
+            if (dur && !isNaN(dur)) {
+                setDuration(dur);
+                lastTimeRef.current = 0;
             }
+        } catch (e) {
+            // getDuration may not be available immediately for some sources
         }
     };
 
-    const handleLoadedMetadata = () => {
-        if (videoRef.current) {
-            setDuration(videoRef.current.duration);
-        }
-    };
-
-    const handlePlayPause = () => {
-        if (!videoRef.current) return;
-        if (videoRef.current.paused) {
-            videoRef.current.play();
-            setIsPlaying(true);
-        } else {
-            videoRef.current.pause();
-            setIsPlaying(false);
-        }
-    };
-
-    const handleComplete = () => {
+    const handleComplete = async () => {
         if (!canComplete) {
-            toast.error('Please watch at least 80% of the lesson before continuing');
+            toast.error('Please actually watch at least 80% of the video before continuing');
             return;
+        }
+
+        try {
+            await updateProgress(courseId, currentLesson._id);
+            setCompletedLessons(prev => new Set([...prev, String(currentLesson._id)]));
+        } catch (err) {
+            console.error('Failed to update progress:', err);
+            toast.error('Failed to save progress, but you can proceed.');
         }
 
         confetti({
@@ -126,27 +276,47 @@ export default function LessonPlayer() {
         });
 
         if (nextLesson) {
-            navigate(`/learner/courses/${courseId}/lessons/${nextLesson._id || nextLesson.id}`);
+            goToLesson(nextLesson);
         } else {
             toast.success('🎉 Congratulations! You finished the course!');
             navigate(`/learner/courses/${courseId}`);
         }
     };
 
-    const formatTime = (seconds) => {
-        if (!seconds || isNaN(seconds)) return '0:00';
-        const m = Math.floor(seconds / 60);
-        const s = Math.floor(seconds % 60);
-        return `${m}:${s.toString().padStart(2, '0')}`;
-    };
-
     // Build the full content URL
     const getContentUrl = (lesson) => {
-        if (!lesson?.contentUrl) return null;
-        // If it's already an absolute URL (e.g., from YouTube or a CDN)
-        if (lesson.contentUrl.startsWith('http')) return lesson.contentUrl;
-        // Otherwise, prefix with the backend base URL
-        return `${API_BASE}${lesson.contentUrl}`;
+        const rawUrl = resolveLessonRawUrl(lesson);
+        if (!rawUrl) return null;
+        
+        // Convert YouTube embed URLs to watch URLs (ReactPlayer requires watch format)
+        // e.g. https://www.youtube.com/embed/pQN-pnXPaVg -> https://www.youtube.com/watch?v=pQN-pnXPaVg
+        if (rawUrl.includes('youtube.com/embed/')) {
+            const videoId = rawUrl.split('youtube.com/embed/')[1]?.split('?')[0];
+            if (videoId) return `https://www.youtube.com/watch?v=${videoId}`;
+        }
+        
+        // Handle youtu.be short links
+        if (rawUrl.includes('youtu.be/')) {
+            const videoId = rawUrl.split('youtu.be/')[1]?.split('?')[0];
+            if (videoId) return `https://www.youtube.com/watch?v=${videoId}`;
+        }
+        
+        // If it's already an absolute URL (CDN, direct video, etc.)
+        if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
+        
+        // Otherwise, prefix with the backend base URL (local uploads)
+        const normalizedPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`;
+        return `${API_BASE}${normalizedPath}`;
+    };
+
+    const isYouTubeUrl = (url) => {
+        if (!url) return false;
+        return /youtube\.com|youtu\.be/i.test(url);
+    };
+
+    const isDirectVideoFileUrl = (url) => {
+        if (!url) return false;
+        return /\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(url) || /\/uploads\//i.test(url);
     };
 
     // ── Loading State ──
@@ -176,8 +346,10 @@ export default function LessonPlayer() {
     }
 
     const contentUrl = getContentUrl(currentLesson);
-    const isVideo = currentLesson.type === 'video';
-    const isPdf = currentLesson.type === 'pdf';
+    const lessonType = inferLessonType(currentLesson);
+    const isVideo = lessonType === 'video';
+    const isPdf = lessonType === 'pdf';
+    const useNativeVideo = isVideo && contentUrl && !isYouTubeUrl(contentUrl) && isDirectVideoFileUrl(contentUrl);
     const courseTitle = course?.title || currentLesson.courseId?.title || 'Course';
 
     return (
@@ -241,67 +413,82 @@ export default function LessonPlayer() {
                     {/* Player / Content Container */}
                     <div className="flex-1 bg-black relative flex items-center justify-center">
                         {isVideo && contentUrl ? (
-                            /* ── Real Video Player ── */
-                            <div className="w-full h-full relative group">
-                                <video
-                                    ref={videoRef}
-                                    src={contentUrl}
-                                    className="w-full h-full object-contain bg-black"
-                                    onTimeUpdate={handleTimeUpdate}
-                                    onLoadedMetadata={handleLoadedMetadata}
-                                    onPlay={() => setIsPlaying(true)}
-                                    onPause={() => setIsPlaying(false)}
-                                    onEnded={() => { setIsPlaying(false); setCanComplete(true); }}
-                                    onClick={handlePlayPause}
-                                    controlsList="nodownload"
-                                />
-                                
-                                {/* Custom Overlay Controls */}
-                                <div className="absolute bottom-0 left-0 right-0 p-6 pt-20 bg-gradient-to-t from-black/80 to-transparent flex flex-col gap-3 opacity-0 group-hover:opacity-100 transition-all duration-500">
-                                    {/* Progress Bar */}
-                                    <div 
-                                        className="w-full h-1.5 bg-white/20 rounded-full cursor-pointer relative group/bar"
-                                        onClick={(e) => {
-                                            if (videoRef.current) {
-                                                const rect = e.currentTarget.getBoundingClientRect();
-                                                const ratio = (e.clientX - rect.left) / rect.width;
-                                                videoRef.current.currentTime = ratio * videoRef.current.duration;
+                            /* ── ReactPlayer with YouTube native controls (fullscreen + speed built-in) ── */
+                            <div
+                                ref={playerContainerRef}
+                                className="w-full h-full bg-black"
+                            >
+                                {useNativeVideo ? (
+                                    <video
+                                        ref={videoRef}
+                                        src={contentUrl}
+                                        className="w-full h-full"
+                                        controls
+                                        playsInline
+                                        preload="metadata"
+                                        onPlay={() => setIsPlaying(true)}
+                                        onPause={() => setIsPlaying(false)}
+                                        onEnded={() => {
+                                            setIsPlaying(false);
+                                            setCanComplete(true);
+                                        }}
+                                        onLoadedMetadata={(event) => {
+                                            const loadedDuration = event.currentTarget.duration;
+                                            if (Number.isFinite(loadedDuration)) {
+                                                setDuration(loadedDuration);
+                                            }
+                                            event.currentTarget.playbackRate = playbackRate;
+                                            lastTimeRef.current = 0;
+                                        }}
+                                        onTimeUpdate={(event) => {
+                                            const currentVideoTime = event.currentTarget.currentTime || 0;
+                                            const delta = currentVideoTime - lastTimeRef.current;
+
+                                            if (delta > 0 && delta < 2) {
+                                                watchTimeRef.current += delta;
+                                            }
+
+                                            lastTimeRef.current = currentVideoTime;
+                                            setCurrentTime(currentVideoTime);
+
+                                            if (!hasCompletedRef.current && duration > 0 && watchTimeRef.current >= duration * 0.8) {
+                                                setCanComplete(true);
+                                                hasCompletedRef.current = true;
                                             }
                                         }}
-                                    >
-                                        <div 
-                                            className="absolute left-0 top-0 h-full bg-indigo-500 rounded-full transition-all"
-                                            style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-                                        />
-                                        <div 
-                                            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover/bar:opacity-100 transition-opacity"
-                                            style={{ left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-                                        />
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handlePlayPause(); }}
-                                            className="text-white hover:text-indigo-400 transition-colors"
-                                        >
-                                            {isPlaying ? <HiPause className="w-6 h-6" /> : <HiPlay className="w-6 h-6" />}
-                                        </button>
-                                        <span className="text-[11px] font-bold text-white/70 tracking-wider font-mono">
-                                            {formatTime(currentTime)} / {formatTime(duration)}
-                                        </span>
-                                        <div className="flex-1" />
-                                        <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">
-                                            {currentLesson.title}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Center Play/Pause overlay (shown when paused) */}
-                                {!isPlaying && (
-                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                        <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-2xl animate-pulse">
-                                            <HiPlay className="w-10 h-10 text-white ml-1" />
-                                        </div>
-                                    </div>
+                                        onError={() => {
+                                            toast.error('Video failed to load. Please check the lesson file URL.');
+                                        }}
+                                    />
+                                ) : (
+                                    <ReactPlayer
+                                        ref={playerRef}
+                                        src={contentUrl}
+                                        url={contentUrl}
+                                        width="100%"
+                                        height="100%"
+                                        controls={true}
+                                        playsInline={true}
+                                        playbackRate={playbackRate}
+                                        onPlay={() => setIsPlaying(true)}
+                                        onPause={() => setIsPlaying(false)}
+                                        onEnded={() => { setIsPlaying(false); setCanComplete(true); }}
+                                        onProgress={handleProgress}
+                                        onReady={handleReady}
+                                        onError={() => {
+                                            toast.error('Video failed to load. Please check the lesson URL.');
+                                        }}
+                                        progressInterval={1000}
+                                        config={{
+                                            youtube: {
+                                                playerVars: {
+                                                    rel: 0,
+                                                    modestbranding: 1,
+                                                    fs: 1,
+                                                }
+                                            }
+                                        }}
+                                    />
                                 )}
                             </div>
                         ) : isPdf && contentUrl ? (
@@ -356,19 +543,64 @@ export default function LessonPlayer() {
                                 variant="ghost" 
                                 disabled={!prevLesson} 
                                 className="text-white hover:bg-white/10"
-                                onClick={() => prevLesson && navigate(`/learner/courses/${courseId}/lessons/${prevLesson._id || prevLesson.id}`)}
+                                onClick={() => goToLesson(prevLesson)}
                             >
                                 <HiChevronLeft /> Prev
                             </Button>
+                            {isVideo && contentUrl && (
+                                <>
+                                    <div className="h-4 w-px bg-white/20 mx-1" />
+                                    <div className="relative">
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="text-white hover:bg-white/10"
+                                            onClick={() => setShowSpeedMenu((prev) => !prev)}
+                                        >
+                                            {playbackRate}x
+                                        </Button>
+                                        {showSpeedMenu && (
+                                            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-slate-900 border border-white/20 rounded-xl p-1 min-w-24">
+                                                {[0.5, 1, 1.25, 1.5, 2].map((speed) => (
+                                                    <button
+                                                        key={speed}
+                                                        onClick={() => handleSpeedChange(speed)}
+                                                        className={clsx(
+                                                            'w-full text-left px-3 py-1.5 text-xs rounded-lg transition-colors',
+                                                            playbackRate === speed ? 'bg-indigo-600 text-white' : 'text-slate-200 hover:bg-white/10'
+                                                        )}
+                                                    >
+                                                        {speed}x
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-white hover:bg-white/10"
+                                        onClick={toggleFullscreen}
+                                    >
+                                        <HiArrowsExpand /> Fullscreen
+                                    </Button>
+                                </>
+                            )}
                             <div className="h-4 w-px bg-white/20 mx-1" />
-                            <span className="text-xs text-white px-2">Lesson {currentIndex + 1} of {allLessons.length}</span>
+                            <span className="text-xs text-white px-2">Lesson {currentIndex >= 0 ? currentIndex + 1 : 1} of {allLessons.length}</span>
                             <div className="h-4 w-px bg-white/20 mx-1" />
                             <Button 
                                 size="sm" 
                                 variant="ghost" 
-                                disabled={!nextLesson} 
+                                disabled={!nextLesson || (!hasCompletedRef.current && !completedLessons.has(String(currentLesson?._id)))} 
                                 className="text-white hover:bg-white/10"
-                                onClick={() => nextLesson && navigate(`/learner/courses/${courseId}/lessons/${nextLesson._id || nextLesson.id}`)}
+                                onClick={() => {
+                                    if (nextLesson && (hasCompletedRef.current || completedLessons.has(String(currentLesson?._id)))) {
+                                        goToLesson(nextLesson);
+                                    } else {
+                                        toast.error('Please complete this lesson to unlock the next one!');
+                                    }
+                                }}
                             >
                                 Next <HiChevronRight />
                             </Button>
@@ -463,27 +695,44 @@ export default function LessonPlayer() {
                     <div className="flex-1 overflow-y-auto">
                         {allLessons.length > 0 ? (
                             <div className="divide-y divide-surface-border">
-                                {allLessons.map((lesson, i) => {
-                                    const lid = lesson._id || lesson.id;
-                                    const active = lid === lessonId;
+                                {allLessons.map((lesson) => {
+                                    const lid = String(lesson._id || lesson.id);
+                                    const active = lesson.order === lessonOrderNum;
+                                    const isCompleted = completedLessons.has(lid) || (active && hasCompletedRef.current);
+                                    
+                                    // Locked if the previous lesson (by order) is not completed
+                                    const prevLesson = allLessons.find(l => l.order === lesson.order - 1);
+                                    const isLocked = lesson.order > 1 && !!prevLesson && !completedLessons.has(String(prevLesson._id || prevLesson.id));
+
                                     return (
                                         <button
                                             key={lid}
-                                            onClick={() => navigate(`/learner/courses/${courseId}/lessons/${lid}`)}
+                                            onClick={() => {
+                                                if (isLocked) {
+                                                    toast.error('Complete the previous lessons to unlock this one!');
+                                                    return;
+                                                }
+                                                navigate(`/learner/courses/${courseId}/lessons/${lesson.order}`);
+                                            }}
                                             className={clsx(
                                                 "w-full flex items-center gap-3 p-4 transition-all group/item text-left",
-                                                active ? "bg-indigo-50 border-l-2 border-indigo-600" : "hover:bg-slate-50"
+                                                active ? "bg-indigo-50 border-l-2 border-indigo-600" : "hover:bg-slate-50",
+                                                isLocked && "opacity-50 cursor-not-allowed"
                                             )}
                                         >
                                             <div className="relative flex-shrink-0">
-                                                {i < currentIndex ? (
+                                                {isCompleted ? (
                                                     <HiCheckCircle className="w-5 h-5 text-emerald-500" />
+                                                ) : isLocked ? (
+                                                    <div className="w-5 h-5 flex items-center justify-center">
+                                                        <HiLockClosed className="w-4 h-4 text-slate-300" />
+                                                    </div>
                                                 ) : (
                                                     <div className={clsx(
                                                         "w-5 h-5 rounded-full border-2 flex items-center justify-center text-[8px] font-black",
-                                                        active ? "border-indigo-600 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-400"
+                                                        active ? "border-indigo-600 bg-indigo-50 text-indigo-600" : "border-slate-300 text-slate-400"
                                                     )}>
-                                                        {i + 1}
+                                                        {lesson.order}
                                                     </div>
                                                 )}
                                             </div>

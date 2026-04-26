@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Course from '../course/course.model.js';
 import Lesson from './lesson.model.js';
 
@@ -10,6 +11,13 @@ export const createLesson = async ({ courseId, title, fileUrl, mimeType, duratio
 	}
 
 	const type = mimeType === 'application/pdf' ? LESSON_TYPES.PDF : LESSON_TYPES.VIDEO;
+	const parsedOrder = Number(order);
+	let resolvedOrder = Number.isFinite(parsedOrder) && parsedOrder > 0 ? parsedOrder : null;
+
+	if (!resolvedOrder) {
+		const lessonCount = await Lesson.countDocuments({ courseId });
+		resolvedOrder = lessonCount + 1;
+	}
 
 	return Lesson.create({
 		courseId,
@@ -17,12 +25,22 @@ export const createLesson = async ({ courseId, title, fileUrl, mimeType, duratio
 		contentUrl: fileUrl,
 		type,
 		duration,
-		order,
+		order: resolvedOrder,
 		description,
 	});
 };
 
-export const getLessonsByCourse = async (courseId) => Lesson.find({ courseId }).sort({ order: 1, _id: 1 });
+export const getLessonsByCourse = async (courseId) => {
+	// Match by both ObjectId and string courseId for resilience against manual imports
+	let objectId = null;
+	try { objectId = new mongoose.Types.ObjectId(courseId); } catch (_) {}
+
+	const query = objectId
+		? { $or: [{ courseId: objectId }, { courseId: courseId.toString() }] }
+		: { courseId: courseId.toString() };
+
+	return Lesson.find(query).sort({ order: 1, _id: 1 });
+};
 
 export const getLessonById = async (lessonId) => {
 	const lesson = await Lesson.findById(lessonId).populate('courseId', 'title');
