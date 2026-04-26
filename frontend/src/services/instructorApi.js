@@ -43,6 +43,7 @@ export const gradeSubmission = (submissionId, payload) => api.post(`/submissions
 
 // ── Quizzes ──
 export const fetchInstructorQuizzes = () => api.get('/quizzes/me').then(unwrap);
+export const fetchQuizById = (quizId) => api.get(`/quizzes/${quizId}`).then(unwrap);
 export const createQuiz = (payload) => api.post('/quizzes', payload).then(unwrap);
 export const updateQuiz = (quizId, payload) => api.put(`/quizzes/${quizId}`, payload).then(unwrap);
 export const deleteQuiz = (quizId) => api.delete(`/quizzes/${quizId}`).then(unwrap);

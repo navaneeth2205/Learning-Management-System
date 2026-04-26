@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
@@ -34,6 +34,9 @@ import {
     resolveDiscussion,
     deleteDiscussionThread,
     deleteDiscussionReply,
+    fetchQuizByLesson,
+    submitQuizAnswers,
+    fetchQuizzesByCourse,
 } from '../../services/learnerApi';
 import toast from 'react-hot-toast';
 import ReactPlayer from 'react-player';
@@ -94,6 +97,15 @@ export default function LessonPlayer() {
     const [discussionSortBy, setDiscussionSortBy] = useState('latest');
     const [creatingDiscussion, setCreatingDiscussion] = useState(false);
     const [creatingReply, setCreatingReply] = useState(false);
+
+    // Quiz state
+    const [lessonQuiz, setLessonQuiz] = useState(null);          // quiz for current lesson (null = none)
+    const [quizLoading, setQuizLoading] = useState(false);
+    const [quizAnswers, setQuizAnswers] = useState({});           // { [questionIndex]: selectedOption }
+    const [quizSubmitting, setQuizSubmitting] = useState(false);
+    const [quizResult, setQuizResult] = useState(null);          // { passed, percentage, score, total }
+    const [quizPassed, setQuizPassed] = useState(false);         // persisted via localStorage
+    const [courseQuizzes, setCourseQuizzes] = useState([]);
 
     const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://127.0.0.1:5000';
 
@@ -221,6 +233,21 @@ export default function LessonPlayer() {
         loadData();
     }, [courseId, lessonOrderNum]);
 
+    useEffect(() => {
+        if (!courseId) {
+            setCourseQuizzes([]);
+            return;
+        }
+
+        fetchQuizzesByCourse(courseId)
+            .then((data) => {
+                setCourseQuizzes(Array.isArray(data) ? data : []);
+            })
+            .catch(() => {
+                setCourseQuizzes([]);
+            });
+    }, [courseId, lessonOrderNum, quizPassed]);
+
     // Reset player state on lesson order change
     useEffect(() => {
         setIsPlaying(false);
@@ -325,7 +352,64 @@ export default function LessonPlayer() {
             });
     }, [selectedDiscussion?._id]);
 
-    // Navigation helpers — use order numbers for URLs, not ObjectIds
+    // Load quiz for current lesson and restore any previous pass result from localStorage
+    useEffect(() => {
+        if (!courseId || !lessonOrderNum) return;
+
+        const storageKey = `quiz_${courseId}_${lessonOrderNum}`;
+        const stored = localStorage.getItem(storageKey);
+        const alreadyPassed = stored === 'passed';
+
+        setQuizResult(null);
+        setQuizAnswers({});
+        setLessonQuiz(null);
+        setQuizPassed(alreadyPassed);
+        setQuizLoading(true);
+
+        fetchQuizByLesson(courseId, lessonOrderNum)
+            .then((quiz) => {
+                setLessonQuiz(quiz || null);
+                // If quiz exists but already passed, keep quizPassed = true
+            })
+            .catch(() => {
+                setLessonQuiz(null); // treat fetch error as "no quiz"
+            })
+            .finally(() => setQuizLoading(false));
+    }, [courseId, lessonOrderNum]);
+
+    const handleQuizSubmit = async () => {
+        if (!lessonQuiz) return;
+        const total = lessonQuiz.questions.length;
+        const answered = Object.keys(quizAnswers).length;
+        if (answered < total) {
+            toast.error(`Please answer all ${total} questions before submitting.`);
+            return;
+        }
+
+        // Build answers array in question order
+        const answersArray = lessonQuiz.questions.map((_, i) => quizAnswers[i] ?? '');
+
+        setQuizSubmitting(true);
+        try {
+            const result = await submitQuizAnswers(lessonQuiz._id, answersArray);
+            const passed = result.passed || result.percentage >= 60;
+            setQuizResult(result);
+            setQuizPassed(passed);
+            if (passed) {
+                const storageKey = `quiz_${courseId}_${lessonOrderNum}`;
+                localStorage.setItem(storageKey, 'passed');
+                toast.success(`ðŸŽ‰ Quiz passed! ${result.percentage}% â€” you can proceed to the next lesson.`);
+            } else {
+                toast.error(`Quiz failed (${result.percentage}%). You need 60% to proceed. Try again!`);
+            }
+        } catch (err) {
+            toast.error(err?.message || 'Failed to submit quiz');
+        } finally {
+            setQuizSubmitting(false);
+        }
+    };
+
+    // Navigation helpers â€” use order numbers for URLs, not ObjectIds
     const currentLessonOrder = Number(currentLesson?.order);
     const currentIndex = allLessons.findIndex(l => Number(l.order) === currentLessonOrder);
     const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
@@ -339,6 +423,53 @@ export default function LessonPlayer() {
     const progressPercent = allLessons.length > 0
         ? Math.round(((currentIndex + 1) / allLessons.length) * 100)
         : 0;
+    const currentLessonId = String(currentLesson?._id || currentLesson?.id || '');
+    const isCurrentLessonCompleted = currentLesson
+        ? completedLessons.has(currentLessonId) || hasCompletedRef.current
+        : false;
+    const lessonQuizLocked = !!lessonQuiz && !quizPassed && !isCurrentLessonCompleted;
+    const quizzesByLessonOrder = allLessons.reduce((map, lesson) => {
+        map.set(Number(lesson.order), []);
+        return map;
+    }, new Map());
+
+    (courseQuizzes || []).forEach((quiz) => {
+        const order = Number(quiz.lessonOrder);
+        if (!Number.isFinite(order) || order <= 0) return;
+        if (!quizzesByLessonOrder.has(order)) {
+            quizzesByLessonOrder.set(order, []);
+        }
+        quizzesByLessonOrder.get(order).push(quiz);
+    });
+
+    const areLessonQuizzesPassed = (order) => {
+        const quizzes = quizzesByLessonOrder.get(Number(order)) || [];
+        if (quizzes.length === 0) {
+            return true;
+        }
+        return quizzes.every((quiz) => quiz.status === 'completed' || quiz.passed);
+    };
+
+    const isLessonUnlocked = (lesson) => {
+        if (!lesson) {
+            return false;
+        }
+
+        const order = Number(lesson.order);
+        if (!Number.isFinite(order) || order <= 1) {
+            return true;
+        }
+
+        const previousLesson = allLessons.find((candidate) => Number(candidate.order) === order - 1);
+        if (!previousLesson) {
+            return true;
+        }
+
+        const previousLessonId = String(previousLesson._id || previousLesson.id || '');
+        const previousCompleted = completedLessons.has(previousLessonId);
+        return previousCompleted && areLessonQuizzesPassed(previousLesson.order);
+    };
+    const currentLessonQuizzesPassed = currentLesson ? areLessonQuizzesPassed(currentLesson.order) : true;
 
     // Video event handlers for ReactPlayer
     const handleProgress = (state) => {
@@ -403,7 +534,7 @@ export default function LessonPlayer() {
         if (nextLesson) {
             goToLesson(nextLesson);
         } else {
-            toast.success('🎉 Congratulations! You finished the course!');
+            toast.success('ðŸŽ‰ Congratulations! You finished the course!');
             navigate(`/learner/courses/${courseId}`);
         }
     };
@@ -674,7 +805,7 @@ export default function LessonPlayer() {
         }
     };
 
-    // ── Loading State ──
+    // â”€â”€ Loading State â”€â”€
     if (loading) {
         return (
             <div className="flex flex-col h-screen items-center justify-center bg-slate-900 text-white">
@@ -684,7 +815,7 @@ export default function LessonPlayer() {
         );
     }
 
-    // ── Error State ──
+    // â”€â”€ Error State â”€â”€
     if (error || !currentLesson) {
         return (
             <div className="flex flex-col h-screen items-center justify-center bg-slate-900 text-white space-y-4">
@@ -768,7 +899,7 @@ export default function LessonPlayer() {
                     {/* Player / Content Container */}
                     <div className="flex-1 bg-black relative flex items-center justify-center">
                         {isVideo && contentUrl ? (
-                            /* ── ReactPlayer with YouTube native controls (fullscreen + speed built-in) ── */
+                            /* â”€â”€ ReactPlayer with YouTube native controls (fullscreen + speed built-in) â”€â”€ */
                             <div
                                 ref={playerContainerRef}
                                 className="w-full h-full bg-black"
@@ -847,7 +978,7 @@ export default function LessonPlayer() {
                                 )}
                             </div>
                         ) : isPdf && contentUrl ? (
-                            /* ── PDF Viewer ── */
+                            /* â”€â”€ PDF Viewer â”€â”€ */
                             <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950 p-8">
                                 <div className="max-w-2xl w-full space-y-6 text-center">
                                     <div className="w-24 h-24 bg-rose-500/10 rounded-3xl flex items-center justify-center mx-auto">
@@ -877,7 +1008,7 @@ export default function LessonPlayer() {
                                 {!canComplete && setTimeout(() => setCanComplete(true), 5000) && null}
                             </div>
                         ) : (
-                            /* ── No Content Fallback ── */
+                            /* â”€â”€ No Content Fallback â”€â”€ */
                             <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950 text-white space-y-4">
                                 <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center animate-pulse">
                                     <HiAcademicCap className="w-10 h-10 text-indigo-400" />
@@ -947,13 +1078,18 @@ export default function LessonPlayer() {
                             <Button 
                                 size="sm" 
                                 variant="ghost" 
-                                disabled={!nextLesson || (!hasCompletedRef.current && !completedLessons.has(String(currentLesson?._id)))} 
+                                disabled={!nextLesson || (!hasCompletedRef.current && !completedLessons.has(String(currentLesson?._id))) || !currentLessonQuizzesPassed}
                                 className="text-white hover:bg-white/10"
                                 onClick={() => {
-                                    if (nextLesson && (hasCompletedRef.current || completedLessons.has(String(currentLesson?._id)))) {
-                                        goToLesson(nextLesson);
-                                    } else {
+                                    const lessonDone = hasCompletedRef.current || completedLessons.has(String(currentLesson?._id));
+                                    if (!nextLesson) return;
+                                    if (!lessonDone) {
                                         toast.error('Please complete this lesson to unlock the next one!');
+                                    } else if (!currentLessonQuizzesPassed) {
+                                        toast.error('Pass the quiz to unlock the next lesson!');
+                                        setActiveTab('quiz');
+                                    } else {
+                                        goToLesson(nextLesson);
                                     }
                                 }}
                             >
@@ -971,6 +1107,16 @@ export default function LessonPlayer() {
                                     <button className={clsx("text-sm font-semibold pb-2 border-b-2 transition-all", activeTab === 'notes' ? "border-primary-600 text-primary-600" : "border-transparent text-text-muted")} onClick={() => setActiveTab('notes')}>Notes</button>
                                     <button className={clsx("text-sm font-semibold pb-2 border-b-2 transition-all", activeTab === 'resources' ? "border-primary-600 text-primary-600" : "border-transparent text-text-muted")} onClick={() => setActiveTab('resources')}>Resources</button>
                                     <button className={clsx("text-sm font-semibold pb-2 border-b-2 transition-all", activeTab === 'discussion' ? "border-primary-600 text-primary-600" : "border-transparent text-text-muted")} onClick={() => setActiveTab('discussion')}>Discussion</button>
+                                    {(lessonQuiz || quizLoading) && (
+                                        <button
+                                            className={clsx("text-sm font-semibold pb-2 border-b-2 transition-all flex items-center gap-1", activeTab === 'quiz' ? "border-primary-600 text-primary-600" : "border-transparent text-text-muted")}
+                                            onClick={() => setActiveTab('quiz')}
+                                        >
+                                            Quiz
+                                            {lessonQuiz && !quizPassed && <span className="ml-1 w-2 h-2 rounded-full bg-rose-500 inline-block" />}
+                                            {lessonQuiz && quizPassed && <span className="ml-1 w-2 h-2 rounded-full bg-emerald-500 inline-block" />}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
@@ -1137,6 +1283,115 @@ export default function LessonPlayer() {
                                     )}
                                 </>
                             )}
+
+                                {activeTab === 'quiz' && (
+                                    <div className="space-y-5">
+                                        {quizLoading && (
+                                            <p className="text-sm text-text-muted">Loading quiz...</p>
+                                        )}
+                                        {!quizLoading && !lessonQuiz && (
+                                            <p className="text-sm text-text-muted">No quiz for this lesson.</p>
+                                        )}
+                                        {!quizLoading && lessonQuiz && (
+                                            <>
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="text-base font-bold text-text-primary">{lessonQuiz.title}</h4>
+                                                    {quizPassed && (
+                                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-bold border border-emerald-200">
+                                                            <HiCheckCircle className="w-3 h-3" /> Passed
+                                                        </span>
+                                                    )}
+                                                    {!quizPassed && quizResult && (
+                                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-rose-50 text-rose-600 text-xs font-bold border border-rose-200">
+                                                            Failed — {quizResult.percentage}%
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-text-muted">
+                                                    Pass mark: {lessonQuiz.passingScore || 60}% · {(lessonQuiz.questionCount || lessonQuiz.questions.length)} question{(lessonQuiz.questionCount || lessonQuiz.questions.length) !== 1 ? 's' : ''}
+                                                </p>
+                                                {lessonQuizLocked ? (
+                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center space-y-3">
+                                                        <div className="w-12 h-12 mx-auto rounded-2xl bg-white border border-slate-200 flex items-center justify-center">
+                                                            <HiLockClosed className="w-6 h-6 text-slate-400" />
+                                                        </div>
+                                                        <p className="text-sm font-bold text-slate-700">Quiz locked</p>
+                                                        <p className="text-sm text-text-muted">
+                                                            {lessonQuiz.requirement || 'Finish watching this lesson to unlock the quiz.'}
+                                                        </p>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <div className="space-y-6">
+                                                            {lessonQuiz.questions.map((q, qi) => {
+                                                                const resultItem = quizResult?.results?.[qi];
+                                                                return (
+                                                                    <div key={qi} className={clsx(
+                                                                        'rounded-xl border p-4 space-y-3 transition-all',
+                                                                        quizResult ? (resultItem?.isCorrect ? 'border-emerald-200 bg-emerald-50/40' : 'border-rose-200 bg-rose-50/40') : 'border-surface-border bg-white'
+                                                                    )}>
+                                                                        <p className="text-sm font-semibold text-text-primary">{qi + 1}. {q.question}</p>
+                                                                        <div className="space-y-2">
+                                                                            {q.options.map((opt, oi) => {
+                                                                                const isSelected = quizAnswers[qi] === opt;
+                                                                                const isCorrectOpt = quizResult && resultItem?.correctAnswer === opt;
+                                                                                const isWrongOpt = quizResult && isSelected && !resultItem?.isCorrect;
+                                                                                return (
+                                                                                    <button
+                                                                                        key={oi}
+                                                                                        disabled={!!quizResult}
+                                                                                        onClick={() => { if (!quizResult) setQuizAnswers(prev => ({ ...prev, [qi]: opt })); }}
+                                                                                        className={clsx(
+                                                                                            'w-full text-left text-sm px-4 py-2.5 rounded-lg border transition-all',
+                                                                                            isCorrectOpt ? 'border-emerald-400 bg-emerald-50 text-emerald-700 font-semibold'
+                                                                                                : isWrongOpt ? 'border-rose-400 bg-rose-50 text-rose-700'
+                                                                                                : isSelected ? 'border-primary-500 bg-primary-50 text-primary-700 font-semibold'
+                                                                                                : 'border-surface-border text-text-secondary hover:border-primary-300 hover:bg-primary-50/30',
+                                                                                            quizResult && 'cursor-default'
+                                                                                        )}
+                                                                                    >
+                                                                                        {opt}
+                                                                                        {isCorrectOpt && <span className="ml-2 text-emerald-600">✓</span>}
+                                                                                        {isWrongOpt && <span className="ml-2 text-rose-600">✗</span>}
+                                                                                    </button>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        {!quizResult && (
+                                                            <Button
+                                                                className="bg-primary-600 text-white hover:bg-primary-700 w-full"
+                                                                disabled={quizSubmitting || Object.keys(quizAnswers).length < lessonQuiz.questions.length}
+                                                                onClick={handleQuizSubmit}
+                                                            >
+                                                                {quizSubmitting ? 'Submitting...' : `Submit Quiz (${Object.keys(quizAnswers).length}/${lessonQuiz.questions.length} answered)`}
+                                                            </Button>
+                                                        )}
+                                                        {quizResult && !quizPassed && (
+                                                            <Button
+                                                                variant="outline"
+                                                                className="w-full border-rose-300 text-rose-600 hover:bg-rose-50"
+                                                                onClick={() => { setQuizResult(null); setQuizAnswers({}); }}
+                                                            >
+                                                                Retry Quiz
+                                                            </Button>
+                                                        )}
+                                                        {quizResult && quizPassed && (
+                                                            <div className="text-center py-4 space-y-1">
+                                                                <p className="text-emerald-600 font-bold text-lg">Quiz Passed!</p>
+                                                                <p className="text-sm text-text-muted">You scored {quizResult.score}/{quizResult.total} ({quizResult.percentage}%)</p>
+                                                                <p className="text-xs text-text-muted">You can now proceed to the next lesson.</p>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
                         </div>
                     </div>
                 </div>
@@ -1159,60 +1414,103 @@ export default function LessonPlayer() {
                                     const isCompleted = completedLessons.has(lid) || (active && hasCompletedRef.current);
                                     
                                     // Locked if the previous lesson (by order) is not completed
-                                    const prevLesson = allLessons.find(l => l.order === lesson.order - 1);
-                                    const isLocked = lesson.order > 1 && !!prevLesson && !completedLessons.has(String(prevLesson._id || prevLesson.id));
+                                    const isLocked = !isLessonUnlocked(lesson);
+                                    const lessonQuizzes = quizzesByLessonOrder.get(Number(lesson.order)) || [];
+                                    const allLessonQuizzesPassed = areLessonQuizzesPassed(lesson.order);
 
                                     return (
-                                        <button
-                                            key={lid}
-                                            onClick={() => {
-                                                if (isLocked) {
-                                                    toast.error('Complete the previous lessons to unlock this one!');
-                                                    return;
-                                                }
-                                                navigate(`/learner/courses/${courseId}/lessons/${lesson.order}`);
-                                            }}
-                                            className={clsx(
-                                                "w-full flex items-center gap-3 p-4 transition-all group/item text-left",
-                                                active ? "bg-indigo-50 border-l-2 border-indigo-600" : "hover:bg-slate-50",
-                                                isLocked && "opacity-50 cursor-not-allowed"
-                                            )}
-                                        >
-                                            <div className="relative flex-shrink-0">
-                                                {isCompleted ? (
-                                                    <HiCheckCircle className="w-5 h-5 text-emerald-500" />
-                                                ) : isLocked ? (
-                                                    <div className="w-5 h-5 flex items-center justify-center">
-                                                        <HiLockClosed className="w-4 h-4 text-slate-300" />
-                                                    </div>
-                                                ) : (
-                                                    <div className={clsx(
-                                                        "w-5 h-5 rounded-full border-2 flex items-center justify-center text-[8px] font-black",
-                                                        active ? "border-indigo-600 bg-indigo-50 text-indigo-600" : "border-slate-300 text-slate-400"
-                                                    )}>
-                                                        {lesson.order}
-                                                    </div>
+                                        <div key={lid} className="border-b border-surface-border">
+                                            <button
+                                                onClick={() => {
+                                                    if (isLocked) {
+                                                        toast.error('Complete the previous lesson and pass its quiz to unlock this one!');
+                                                        return;
+                                                    }
+                                                    navigate(`/learner/courses/${courseId}/lessons/${lesson.order}`);
+                                                }}
+                                                className={clsx(
+                                                    "w-full flex items-center gap-3 p-4 transition-all group/item text-left",
+                                                    active ? "bg-indigo-50 border-l-2 border-indigo-600" : "hover:bg-slate-50",
+                                                    isLocked && "opacity-50 cursor-not-allowed"
                                                 )}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className={clsx(
-                                                    "text-xs font-bold truncate",
-                                                    active ? "text-indigo-600" : "text-slate-700"
-                                                )}>
-                                                    {lesson.title}
-                                                </p>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    {lesson.type === 'pdf' ? (
-                                                        <HiDocumentText className="w-3 h-3 text-rose-400" />
+                                            >
+                                                <div className="relative flex-shrink-0">
+                                                    {isCompleted ? (
+                                                        <HiCheckCircle className="w-5 h-5 text-emerald-500" />
+                                                    ) : isLocked ? (
+                                                        <div className="w-5 h-5 flex items-center justify-center">
+                                                            <HiLockClosed className="w-4 h-4 text-slate-300" />
+                                                        </div>
                                                     ) : (
-                                                        <HiPlay className="w-3 h-3 text-slate-300" />
+                                                        <div className={clsx(
+                                                            "w-5 h-5 rounded-full border-2 flex items-center justify-center text-[8px] font-black",
+                                                            active ? "border-indigo-600 bg-indigo-50 text-indigo-600" : "border-slate-300 text-slate-400"
+                                                        )}>
+                                                            {lesson.order}
+                                                        </div>
                                                     )}
-                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                                        {lesson.duration || lesson.type}
-                                                    </span>
                                                 </div>
-                                            </div>
-                                        </button>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={clsx(
+                                                        "text-xs font-bold truncate",
+                                                        active ? "text-indigo-600" : "text-slate-700"
+                                                    )}>
+                                                        {lesson.title}
+                                                    </p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        {lesson.type === 'pdf' ? (
+                                                            <HiDocumentText className="w-3 h-3 text-rose-400" />
+                                                        ) : (
+                                                            <HiPlay className="w-3 h-3 text-slate-300" />
+                                                        )}
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                            {lesson.duration || lesson.type}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                            {lessonQuizzes.map((quiz) => {
+                                                const quizLocked = !isCompleted;
+                                                const quizPassedState = quiz.status === 'completed' || quiz.passed;
+                                                return (
+                                                    <button
+                                                        key={quiz._id}
+                                                        onClick={() => {
+                                                            if (quizLocked) {
+                                                                toast.error(quiz.requirement || 'Finish this lesson to unlock the quiz.');
+                                                                return;
+                                                            }
+                                                            setActiveTab('quiz');
+                                                        }}
+                                                        className={clsx(
+                                                            "w-full flex items-center gap-3 px-4 py-3 pl-12 text-left bg-slate-50/80 transition-all",
+                                                            quizLocked ? "opacity-60 cursor-not-allowed" : "hover:bg-amber-50"
+                                                        )}
+                                                    >
+                                                        <div className="w-5 h-5 flex items-center justify-center">
+                                                            {quizPassedState ? (
+                                                                <HiCheckCircle className="w-4 h-4 text-emerald-500" />
+                                                            ) : quizLocked ? (
+                                                                <HiLockClosed className="w-4 h-4 text-slate-300" />
+                                                            ) : (
+                                                                <HiClipboardList className="w-4 h-4 text-amber-500" />
+                                                            )}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-[11px] font-bold text-slate-700 truncate">{quiz.title}</p>
+                                                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
+                                                                {quizPassedState ? 'Quiz Passed' : quizLocked ? 'Locked' : 'Quiz Required'}
+                                                            </p>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                            {lessonQuizzes.length > 0 && isCompleted && !allLessonQuizzesPassed && (
+                                                <div className="px-4 pb-3 pl-12 text-[10px] font-semibold text-amber-700 bg-slate-50/80">
+                                                    Pass this quiz to unlock the next lesson.
+                                                </div>
+                                            )}
+                                        </div>
                                     );
                                 })}
                             </div>

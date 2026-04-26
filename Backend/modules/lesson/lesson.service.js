@@ -4,6 +4,32 @@ import Lesson from './lesson.model.js';
 
 import { LESSON_TYPES, createAppError } from '../../utils/constants.js';
 
+const buildCourseIdMatchers = (courseId) => {
+	const rawValue = courseId?.toString?.() ?? String(courseId);
+	const matchers = rawValue ? [rawValue] : [];
+
+	if (mongoose.isValidObjectId(rawValue)) {
+		matchers.push(new mongoose.Types.ObjectId(rawValue));
+	}
+
+	return matchers;
+};
+
+export const countLessonsByCourseId = async (courseId) => {
+	const courseIdMatchers = buildCourseIdMatchers(courseId);
+	return Lesson.collection.countDocuments({
+		courseId: { $in: courseIdMatchers },
+	});
+};
+
+export const findLessonsByCourseId = async (courseId) => {
+	const courseIdMatchers = buildCourseIdMatchers(courseId);
+	return Lesson.collection
+		.find({ courseId: { $in: courseIdMatchers } })
+		.sort({ order: 1, _id: 1 })
+		.toArray();
+};
+
 export const createLesson = async ({ courseId, title, fileUrl, mimeType, duration, order, description }) => {
 	const course = await Course.findById(courseId);
 	if (!course) {
@@ -15,7 +41,7 @@ export const createLesson = async ({ courseId, title, fileUrl, mimeType, duratio
 	let resolvedOrder = Number.isFinite(parsedOrder) && parsedOrder > 0 ? parsedOrder : null;
 
 	if (!resolvedOrder) {
-		const lessonCount = await Lesson.countDocuments({ courseId });
+		const lessonCount = await countLessonsByCourseId(courseId);
 		resolvedOrder = lessonCount + 1;
 	}
 
@@ -31,15 +57,7 @@ export const createLesson = async ({ courseId, title, fileUrl, mimeType, duratio
 };
 
 export const getLessonsByCourse = async (courseId) => {
-	// Match by both ObjectId and string courseId for resilience against manual imports
-	let objectId = null;
-	try { objectId = new mongoose.Types.ObjectId(courseId); } catch (_) {}
-
-	const query = objectId
-		? { $or: [{ courseId: objectId }, { courseId: courseId.toString() }] }
-		: { courseId: courseId.toString() };
-
-	return Lesson.find(query).sort({ order: 1, _id: 1 });
+	return findLessonsByCourseId(courseId);
 };
 
 export const getLessonById = async (lessonId) => {

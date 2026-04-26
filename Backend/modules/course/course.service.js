@@ -1,7 +1,6 @@
-import mongoose from 'mongoose';
 import Course from './course.model.js';
 import Enrollment from '../enrollment/enrollment.model.js';
-import Lesson from '../lesson/lesson.model.js';
+import { findLessonsByCourseId } from '../lesson/lesson.service.js';
 
 import { createAppError } from '../../utils/constants.js';
 
@@ -70,13 +69,7 @@ export const getCourseWithDetails = async (courseId) => {
 		throw createAppError('Course not found', 404);
 	}
 
-	let lessonObjectId = null;
-	try { lessonObjectId = new mongoose.Types.ObjectId(courseId); } catch (_) {}
-	const lessonQuery = lessonObjectId
-		? { $or: [{ courseId: lessonObjectId }, { courseId: courseId.toString() }] }
-		: { courseId: courseId.toString() };
-
-	const lessons = await Lesson.find(lessonQuery).sort({ order: 1, _id: 1 });
+	const lessons = await findLessonsByCourseId(courseId);
 	const enrollmentCount = await Enrollment.countDocuments({ courseId });
 
 	return {

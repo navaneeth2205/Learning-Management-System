@@ -6,6 +6,7 @@ import {
 	createQuizController,
 	listQuizzesByCourseController,
 	getQuizController,
+	getQuizByLessonController,
 	submitQuizController,
 	myQuizzesController,
 	getAttemptResultController,
@@ -17,6 +18,7 @@ const router = express.Router();
 router.post('/', authenticate, isInstructorOrAdmin, createQuizController);
 router.get('/me', authenticate, myQuizzesController);
 router.get('/course/:courseId', authenticate, listQuizzesByCourseController);
+router.get('/lesson/:courseId/:lessonOrder', authenticate, getQuizByLessonController);
 router.get('/:quizId', authenticate, getQuizController);
 router.post('/:quizId/submit', authenticate, isLearnerOrAdmin, submitQuizController);
 router.get('/attempt/:attemptId', authenticate, getAttemptResultController);

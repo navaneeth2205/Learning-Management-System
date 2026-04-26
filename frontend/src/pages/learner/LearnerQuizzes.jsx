@@ -1,19 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    HiLightningBolt, HiCheckCircle, HiPlay, HiQuestionMarkCircle,
-    HiClock, HiChevronRight, HiLockClosed, HiTrendingUp,
-    HiSparkles, HiSearch, HiX
+    HiLightningBolt,
+    HiCheckCircle,
+    HiPlay,
+    HiQuestionMarkCircle,
+    HiClock,
+    HiChevronRight,
+    HiLockClosed,
+    HiTrendingUp,
+    HiSparkles,
+    HiSearch,
+    HiX,
 } from 'react-icons/hi';
-import Select from '../../components/ui/Select';
 import clsx from 'clsx';
+import Select from '../../components/ui/Select';
 import { fetchMyQuizzes } from '../../services/learnerApi';
 
-/* ─── Font helpers ─────────────────────────────────────────── */
 const sora = { fontFamily: "'Sora', sans-serif" };
 const mono = { fontFamily: "'DM Mono', monospace" };
 
-/* ─── Status config ────────────────────────────────────────── */
 const STATUS = {
     available: {
         border: 'border-l-[4px] border-l-violet-500',
@@ -47,112 +53,96 @@ const STATUS = {
 
 const TABS = ['All', 'Available', 'Completed', 'Upcoming', 'Locked'];
 
-const scoreBar = s => s >= 90 ? 'bg-emerald-500' : s >= 70 ? 'bg-amber-400' : 'bg-red-400';
-const scoreTxt = s => s >= 90 ? 'text-emerald-600' : s >= 70 ? 'text-amber-600' : 'text-red-500';
+const scoreBar = (score) => (score >= 90 ? 'bg-emerald-500' : score >= 70 ? 'bg-amber-400' : 'bg-red-400');
+const scoreTxt = (score) => (score >= 90 ? 'text-emerald-600' : score >= 70 ? 'text-amber-600' : 'text-red-500');
 
-/* ─── Data ─────────────────────────────────────────────────── */
-const QUIZZES = [
-    {
-        id: 'q1', status: 'available',
-        title: 'React Hooks Fundamentals',
-        course: 'Advanced React Patterns',
-        duration: '38m', questions: 10, passRate: 70, xp: 150,
-        maxAttempts: 3, attemptsUsed: 1,
-        desc: 'Master useState, useEffect, useReducer, and custom hooks with real-world scenarios.',
-    },
-    {
-        id: 'q2', status: 'completed',
-        title: 'Advanced Next.js Routing',
-        course: 'Fullstack Next.js 14',
-        duration: '45m', questions: 15, passRate: 80, xp: 200, score: 87,
-        maxAttempts: 2, attemptsUsed: 2,
-        desc: 'App router, server components, dynamic segments, and parallel routes.',
-    },
-    {
-        id: 'q5', status: 'completed',
-        title: 'CSS Grid & Flexbox Mastery',
-        course: 'UI/UX Design Masterclass',
-        duration: '20m', questions: 18, passRate: 70, xp: 180, score: 95,
-        maxAttempts: 5, attemptsUsed: 1,
-        desc: 'Responsive layouts, auto-fill/fit grids, alignment, and gap utilities.',
-    },
-    {
-        id: 'q3', status: 'locked',
-        title: 'GraphQL Security Basics',
-        course: 'Backend API Design',
-        duration: '28m', questions: 5, passRate: 60, xp: 120,
-        requirement: 'Complete Module 3',
-        desc: 'Authentication, depth limiting, rate-limiting, and query cost analysis.',
-    },
-    {
-        id: 'q4', status: 'upcoming',
-        title: 'State Management Masterclass',
-        course: 'Advanced React Patterns',
-        duration: '60m', questions: 20, passRate: 75, xp: 250,
-        availableOn: 'May 1, 2026',
-        desc: 'Redux Toolkit, Zustand, Jotai — when to use each and migration patterns.',
-    },
-];
+const toQuizCard = (quiz) => {
+    const questionCount = quiz.questionCount || quiz.questions?.length || 0;
+    const courseTitle = quiz.courseId?.title || 'Course';
+    const lessonLabel = quiz.lessonTitle || (quiz.lessonOrder ? `Lesson ${quiz.lessonOrder}` : '');
 
-/* ══════════════════════════════════════════════════════════════
-   PAGE
-═══════════════════════════════════════════════════════════════ */
+    return {
+        id: quiz._id,
+        status: quiz.status || 'available',
+        title: quiz.title,
+        course: courseTitle,
+        difficulty: quiz.courseId?.difficulty || quiz.difficulty || 'Unspecified',
+        duration: `${quiz.timeLimit || 30}m`,
+        questions: questionCount,
+        passRate: quiz.passingScore || 70,
+        xp: Math.max(questionCount, 1) * 15,
+        maxAttempts: quiz.maxAttempts || 3,
+        attemptsUsed: quiz.attemptsUsed ?? quiz.attempts ?? 0,
+        score: quiz.score ?? undefined,
+        requirement: quiz.requirement,
+        availableOn: quiz.availableOn,
+        lessonTitle: quiz.lessonTitle,
+        lessonOrder: quiz.lessonOrder,
+        desc: quiz.requirement
+            ? `${quiz.requirement}${lessonLabel ? ` Linked to ${lessonLabel}.` : ''}`
+            : `Quiz for ${courseTitle}. ${questionCount} question${questionCount === 1 ? '' : 's'}.`,
+    };
+};
+
 export default function LearnerQuizzes() {
     const [tab, setTab] = useState('All');
     const [search, setSearch] = useState('');
     const [course, setCourse] = useState('All Courses');
     const [diff, setDiff] = useState('All Difficulties');
     const [liveQuizzes, setLiveQuizzes] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
     const navigate = useNavigate();
 
     useEffect(() => {
+        let isActive = true;
+
         fetchMyQuizzes()
-            .then(data => {
-                if (data && data.length > 0) {
-                    const mapped = data.map(q => ({
-                        id: q._id,
-                        status: q.status || 'available',
-                        title: q.title,
-                        course: q.courseId?.title || 'Course',
-                        duration: `${q.timeLimit || 30}m`,
-                        questions: q.questions?.length || 0,
-                        passRate: q.passingScore || 70,
-                        xp: (q.questions?.length || 5) * 15,
-                        maxAttempts: 3,
-                        attemptsUsed: q.attempts || 0,
-                        score: q.score || undefined,
-                        desc: `Quiz for ${q.courseId?.title || 'this course'}. ${q.questions?.length || 0} questions.`,
-                    }));
-                    setLiveQuizzes(mapped);
-                }
+            .then((data) => {
+                if (!isActive) return;
+                setLiveQuizzes((data || []).map(toQuizCard));
+                setLoadError('');
             })
-            .catch(() => {});
+            .catch((error) => {
+                if (!isActive) return;
+                setLiveQuizzes([]);
+                setLoadError(error.message || 'Failed to load quizzes.');
+            })
+            .finally(() => {
+                if (isActive) {
+                    setIsLoading(false);
+                }
+            });
+
+        return () => {
+            isActive = false;
+        };
     }, []);
 
-    const allQuizzes = liveQuizzes.length > 0 ? [...liveQuizzes, ...QUIZZES] : QUIZZES;
-    const completed = allQuizzes.filter(q => q.status === 'completed');
+    const allQuizzes = liveQuizzes;
+    const completed = allQuizzes.filter((quiz) => quiz.status === 'completed');
     const avgScore = completed.length
-        ? Math.round(completed.reduce((s, q) => s + (q.score || 0), 0) / completed.length)
+        ? Math.round(completed.reduce((sum, quiz) => sum + (quiz.score || 0), 0) / completed.length)
         : 0;
-    const totalXP = completed.reduce((s, q) => s + q.xp, 0);
+    const totalXP = completed.reduce((sum, quiz) => sum + quiz.xp, 0);
 
-    const visible = allQuizzes.filter(q => {
-        const matchTab = tab === 'All' || q.status === tab.toLowerCase();
-        const matchSearch = q.title.toLowerCase().includes(search.toLowerCase()) ||
-            q.course.toLowerCase().includes(search.toLowerCase());
-        const matchCourse = course === 'All Courses' || q.course === course;
-        return matchTab && matchSearch && matchCourse;
+    const visible = allQuizzes.filter((quiz) => {
+        const matchTab = tab === 'All' || quiz.status === tab.toLowerCase();
+        const matchSearch = quiz.title.toLowerCase().includes(search.toLowerCase())
+            || quiz.course.toLowerCase().includes(search.toLowerCase());
+        const matchCourse = course === 'All Courses' || quiz.course === course;
+        const matchDifficulty = diff === 'All Difficulties'
+            || (quiz.difficulty || '').toLowerCase() === diff.toLowerCase();
+
+        return matchTab && matchSearch && matchCourse && matchDifficulty;
     });
 
-    const availableGroup = visible.filter(q => q.status !== 'upcoming');
-    const upcomingGroup = visible.filter(q => q.status === 'upcoming');
-
-    const courses = ['All Courses', ...new Set(allQuizzes.map(q => q.course))];
+    const mainGroup = visible.filter((quiz) => quiz.status !== 'upcoming');
+    const upcomingGroup = visible.filter((quiz) => quiz.status === 'upcoming');
+    const courses = ['All Courses', ...new Set(allQuizzes.map((quiz) => quiz.course))];
 
     return (
         <div className="p-6 max-w-5xl mx-auto space-y-8" style={sora}>
-
-            {/* ── Header ─────────────────────────────────────── */}
             <div>
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
                     My Quizzes
@@ -162,67 +152,87 @@ export default function LearnerQuizzes() {
                 </p>
             </div>
 
-            {/* ── Stats Banner ───────────────────────────────── */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[
-                    { icon: <HiCheckCircle className="w-5 h-5 text-emerald-500" />, label: 'Completed', value: completed.length, sub: `of ${QUIZZES.length} quizzes`, bg: 'from-emerald-50 to-white border-emerald-100' },
-                    { icon: <HiTrendingUp className="w-5 h-5 text-violet-500" />, label: 'Avg Score', value: `${avgScore}%`, sub: 'pass mark: 70%', bg: 'from-violet-50 to-white border-violet-100' },
-                    { icon: <HiSparkles className="w-5 h-5 text-amber-500" />, label: 'XP Earned', value: `+${totalXP}`, sub: 'this month', bg: 'from-amber-50 to-white border-amber-100' },
-                ].map(s => (
-                    <div key={s.label}
-                        className={`bg-gradient-to-br ${s.bg} border rounded-2xl p-5 flex items-center gap-4 shadow-sm`}>
+                    {
+                        icon: <HiCheckCircle className="w-5 h-5 text-emerald-500" />,
+                        label: 'Completed',
+                        value: completed.length,
+                        sub: `of ${allQuizzes.length} quizzes`,
+                        bg: 'from-emerald-50 to-white border-emerald-100',
+                    },
+                    {
+                        icon: <HiTrendingUp className="w-5 h-5 text-violet-500" />,
+                        label: 'Avg Score',
+                        value: `${avgScore}%`,
+                        sub: 'pass mark: 70%',
+                        bg: 'from-violet-50 to-white border-violet-100',
+                    },
+                    {
+                        icon: <HiSparkles className="w-5 h-5 text-amber-500" />,
+                        label: 'XP Earned',
+                        value: `+${totalXP}`,
+                        sub: 'from completed quizzes',
+                        bg: 'from-amber-50 to-white border-amber-100',
+                    },
+                ].map((stat) => (
+                    <div
+                        key={stat.label}
+                        className={`bg-gradient-to-br ${stat.bg} border rounded-2xl p-5 flex items-center gap-4 shadow-sm`}
+                    >
                         <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center flex-shrink-0">
-                            {s.icon}
+                            {stat.icon}
                         </div>
                         <div>
-                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{s.label}</p>
-                            <p className="text-2xl font-bold text-slate-900 leading-none mt-0.5" style={mono}>{s.value}</p>
-                            <p className="text-[11px] text-slate-400 font-medium mt-1">{s.sub}</p>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>
+                            <p className="text-2xl font-bold text-slate-900 leading-none mt-0.5" style={mono}>{stat.value}</p>
+                            <p className="text-[11px] text-slate-400 font-medium mt-1">{stat.sub}</p>
                         </div>
                     </div>
                 ))}
             </div>
 
-            {/* ── Controls ───────────────────────────────────── */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                {/* Tabs */}
                 <div className="flex bg-slate-100 p-1 rounded-xl gap-1 flex-wrap">
-                    {TABS.map(t => (
-                        <button key={t} onClick={() => setTab(t)}
-                            className={`px-4 py-1.5 text-sm font-bold rounded-lg transition-all ${tab === t
+                    {TABS.map((tabLabel) => (
+                        <button
+                            key={tabLabel}
+                            onClick={() => setTab(tabLabel)}
+                            className={`px-4 py-1.5 text-sm font-bold rounded-lg transition-all ${tab === tabLabel
                                 ? 'bg-white text-violet-700 shadow-sm'
                                 : 'text-slate-500 hover:text-slate-800'
                                 }`}
                         >
-                            {t}
+                            {tabLabel}
                         </button>
                     ))}
                 </div>
 
-                {/* Search */}
                 <div className="relative w-full sm:w-64">
                     <HiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                     <input
                         value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Search quizzes…"
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="Search quizzes..."
                         className="w-full pl-10 pr-9 py-2.5 text-sm rounded-xl border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-300 transition-all placeholder-slate-400 font-medium"
                     />
                     {search && (
-                        <button onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                        <button
+                            onClick={() => setSearch('')}
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
                             <HiX className="w-4 h-4" />
                         </button>
                     )}
                 </div>
             </div>
 
-            {/* Filters */}
             <div className="flex gap-4 flex-wrap">
                 <div className="w-full sm:w-64">
                     <Select
                         value={course}
                         onChange={setCourse}
-                        options={courses.map(c => ({ label: c, value: c }))}
+                        options={courses.map((courseName) => ({ label: courseName, value: courseName }))}
                         className="font-semibold !h-10"
                     />
                 </div>
@@ -234,37 +244,47 @@ export default function LearnerQuizzes() {
                             { label: 'All Difficulties', value: 'All Difficulties' },
                             { label: 'Beginner', value: 'Beginner' },
                             { label: 'Intermediate', value: 'Intermediate' },
-                            { label: 'Advanced', value: 'Advanced' }
+                            { label: 'Advanced', value: 'Advanced' },
                         ]}
                         className="font-semibold !h-10"
                     />
                 </div>
             </div>
 
-            {/* ── Empty State ────────────────────────────────── */}
-            {visible.length === 0 && (
-                <div className="text-center py-24 bg-white rounded-3xl border border-dashed border-slate-200 space-y-3">
-                    <HiQuestionMarkCircle className="w-12 h-12 mx-auto text-slate-200" />
-                    <p className="font-bold text-slate-400">No quizzes found matching your criteria.</p>
+            {isLoading && (
+                <div className="text-center py-16 bg-white rounded-3xl border border-slate-100">
+                    <p className="font-bold text-slate-500">Loading quizzes...</p>
                 </div>
             )}
 
-            {/* ── AVAILABLE section ──────────────────────────── */}
-            {availableGroup.length > 0 && (
+            {!isLoading && visible.length === 0 && (
+                <div className="text-center py-24 bg-white rounded-3xl border border-dashed border-slate-200 space-y-3">
+                    <HiQuestionMarkCircle className="w-12 h-12 mx-auto text-slate-200" />
+                    <p className="font-bold text-slate-400">
+                        {loadError
+                            ? 'Unable to load quizzes right now.'
+                            : allQuizzes.length === 0
+                                ? 'No quizzes are available for your enrolled courses yet.'
+                                : 'No quizzes found matching your criteria.'}
+                    </p>
+                    {loadError && <p className="text-xs font-semibold text-rose-500">{loadError}</p>}
+                </div>
+            )}
+
+            {!isLoading && mainGroup.length > 0 && (
                 <section className="space-y-4">
-                    <SectionLabel>Available Assessments</SectionLabel>
+                    <SectionLabel>Assessments</SectionLabel>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                        {availableGroup.map(q => <QuizCard key={q.id} quiz={q} navigate={navigate} />)}
+                        {mainGroup.map((quiz) => <QuizCard key={quiz.id} quiz={quiz} navigate={navigate} />)}
                     </div>
                 </section>
             )}
 
-            {/* ── UPCOMING section ───────────────────────────── */}
-            {upcomingGroup.length > 0 && (
+            {!isLoading && upcomingGroup.length > 0 && (
                 <section className="space-y-4">
                     <SectionLabel>Coming Soon</SectionLabel>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                        {upcomingGroup.map(q => <QuizCard key={q.id} quiz={q} navigate={navigate} />)}
+                        {upcomingGroup.map((quiz) => <QuizCard key={quiz.id} quiz={quiz} navigate={navigate} />)}
                     </div>
                 </section>
             )}
@@ -272,7 +292,6 @@ export default function LearnerQuizzes() {
     );
 }
 
-/* ─── Section Label ────────────────────────────────────────── */
 function SectionLabel({ children }) {
     return (
         <div className="flex items-center gap-4">
@@ -284,20 +303,19 @@ function SectionLabel({ children }) {
     );
 }
 
-/* ─── Quiz Card ────────────────────────────────────────────── */
 function QuizCard({ quiz, navigate }) {
-    const cfg = STATUS[quiz.status];
+    const cfg = STATUS[quiz.status] || STATUS.available;
     const { Icon } = cfg;
 
     return (
-        <div className={`
-            group bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col
-            hover:-translate-y-1 hover:shadow-lg transition-all duration-300
-            ${cfg.border} ${cfg.glow}
-        `}>
+        <div
+            className={`
+                group bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col
+                hover:-translate-y-1 hover:shadow-lg transition-all duration-300
+                ${cfg.border} ${cfg.glow}
+            `}
+        >
             <div className="p-4 flex-1 space-y-4">
-
-                {/* Top row */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${cfg.iconBg} shadow-sm`}>
@@ -312,7 +330,6 @@ function QuizCard({ quiz, navigate }) {
                     </span>
                 </div>
 
-                {/* Title + course */}
                 <div>
                     <h3 className="text-base font-bold text-slate-900 group-hover:text-violet-700 transition-colors leading-snug">
                         {quiz.title}
@@ -320,10 +337,8 @@ function QuizCard({ quiz, navigate }) {
                     <p className="text-[10px] font-bold text-violet-500 uppercase tracking-widest mt-1">{quiz.course}</p>
                 </div>
 
-                {/* Description */}
                 <p className="text-xs text-slate-500 leading-relaxed line-clamp-2 font-medium">{quiz.desc}</p>
 
-                {/* Meta chips */}
                 <div className="flex items-center gap-3 text-[10px] text-slate-500 pt-2 border-t border-slate-50" style={mono}>
                     <span className="flex items-center gap-1">
                         <HiQuestionMarkCircle className="w-3.5 h-3.5 text-slate-300" />
@@ -339,7 +354,6 @@ function QuizCard({ quiz, navigate }) {
                     </span>
                 </div>
 
-                {/* Score bar (completed) */}
                 {quiz.status === 'completed' && (
                     <div className="space-y-2 pt-1">
                         <div className="flex justify-between text-xs">
@@ -355,18 +369,16 @@ function QuizCard({ quiz, navigate }) {
                     </div>
                 )}
 
-                {/* Unlock date (upcoming) */}
                 {quiz.status === 'upcoming' && (
                     <div className="p-3 bg-amber-50 rounded-xl border border-amber-100/50 flex items-center gap-3">
                         <HiClock className="w-4 h-4 text-amber-500" />
                         <p className="text-[11px] text-amber-700 font-bold uppercase tracking-wider" style={mono}>
-                            Available on — {quiz.availableOn}
+                            Available on - {quiz.availableOn}
                         </p>
                     </div>
                 )}
             </div>
 
-            {/* CTA */}
             <div className="px-4 pb-4">
                 {quiz.status === 'available' && (
                     <button
@@ -388,10 +400,10 @@ function QuizCard({ quiz, navigate }) {
                             disabled={quiz.attemptsUsed >= quiz.maxAttempts}
                             onClick={() => navigate(`/learner/quiz/${quiz.id}/attempt`)}
                             className={clsx(
-                                "py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]",
-                                quiz.attemptsUsed >= quiz.maxAttempts 
-                                    ? "bg-slate-50 text-slate-400 border-slate-100 cursor-not-allowed opacity-60" 
-                                    : "border-slate-100 hover:bg-slate-50 text-slate-600"
+                                'py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]',
+                                quiz.attemptsUsed >= quiz.maxAttempts
+                                    ? 'bg-slate-50 text-slate-400 border-slate-100 cursor-not-allowed opacity-60'
+                                    : 'border-slate-100 hover:bg-slate-50 text-slate-600'
                             )}
                         >
                             {quiz.attemptsUsed >= quiz.maxAttempts ? 'Attempts Exhausted' : 'Retake'}
@@ -403,7 +415,7 @@ function QuizCard({ quiz, navigate }) {
                         disabled
                         className="w-full py-2 rounded-xl bg-slate-50 text-slate-400 text-xs font-bold flex items-center justify-center gap-1.5 border border-slate-100 cursor-not-allowed"
                     >
-                        <HiLockClosed className="w-3.5 h-3.5" /> {quiz.requirement}
+                        <HiLockClosed className="w-3.5 h-3.5" /> {quiz.requirement || 'Complete the lesson to unlock'}
                     </button>
                 )}
                 {quiz.status === 'upcoming' && (

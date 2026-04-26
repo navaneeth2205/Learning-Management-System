@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { HiOutlineClock, HiMenu, HiChevronLeft, HiChevronRight, HiFlag, HiX, HiOutlineFlag } from 'react-icons/hi';
@@ -18,11 +18,19 @@ export default function QuizAttempt() {
 
     const [quiz, setQuiz] = useState(null);
     const [quizLoading, setQuizLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => {
+        setQuizLoading(true);
         fetchQuizById(id)
-            .then(data => setQuiz(data))
-            .catch(() => setQuiz(null))
+            .then(data => {
+                setQuiz(data);
+                setLoadError('');
+            })
+            .catch((error) => {
+                setQuiz(null);
+                setLoadError(error.message || 'Quiz not found');
+            })
             .finally(() => setQuizLoading(false));
     }, [id]);
 
@@ -64,7 +72,15 @@ export default function QuizAttempt() {
         if (isRunning && seconds < 60) setTimeUpPulse(true);
     }, [seconds, isRunning]);
 
-    if (!quiz) return <div className="p-10 text-center">Quiz not found</div>;
+    if (quizLoading) return <div className="p-10 text-center font-semibold text-slate-500">Loading quiz...</div>;
+    if (!quiz) {
+        return (
+            <div className="p-10 max-w-xl mx-auto text-center space-y-4">
+                <p className="text-lg font-bold text-slate-700">{loadError || 'Quiz not found'}</p>
+                <Button variant="outline" onClick={() => navigate('/learner/quizzes')}>Back to Quizzes</Button>
+            </div>
+        );
+    }
 
     const handleStart = () => {
         dispatch(startAttempt(quiz));

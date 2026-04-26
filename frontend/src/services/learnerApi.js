@@ -55,6 +55,8 @@ export const fetchMySubmissions = () => api.get('/submissions/me').then(unwrap);
 export const fetchMyQuizzes = () => api.get('/quizzes/me').then(unwrap);
 export const fetchQuizzesByCourse = (courseId) => api.get(`/quizzes/course/${courseId}`).then(unwrap);
 export const fetchQuizById = (quizId) => api.get(`/quizzes/${quizId}`).then(unwrap);
+export const fetchQuizByLesson = (courseId, lessonOrder) => api.get(`/quizzes/lesson/${courseId}/${lessonOrder}`).then(unwrap);
+export const submitQuizAnswers = (quizId, answers) => api.post(`/quizzes/${quizId}/submit`, { answers }).then(unwrap);
 export const submitQuiz = (quizId, payload) => api.post(`/quizzes/${quizId}/submit`, payload).then(unwrap);
 export const fetchQuizAttemptResult = (attemptId) => api.get(`/quizzes/attempt/${attemptId}`).then(unwrap);
 export const fetchMyQuizAttempts = (quizId) => api.get(`/quizzes/${quizId}/my-attempts`).then(unwrap);

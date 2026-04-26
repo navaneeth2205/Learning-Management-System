@@ -1,6 +1,6 @@
 import { successResponse } from '../../utils/responseHandler.js';
 
-import { createQuiz, getQuizzesByCourse, getQuizById, submitQuizAnswers, getQuizzesForLearner, getQuizAttemptResult, getQuizAttemptsByUser } from './quiz.service.js';
+import { createQuiz, getQuizzesByCourse, getQuizByLessonOrder, getQuizById, submitQuizAnswers, getQuizzesForLearner, getQuizAttemptResult, getQuizAttemptsByUser } from './quiz.service.js';
 
 export const createQuizController = async (req, res, next) => {
 	try {
@@ -22,6 +22,7 @@ export const submitQuizController = async (req, res, next) => {
 			userId: req.user._id,
 			answers: req.body.answers,
 			timeTaken: req.body.timeTaken,
+			requester: req.user,
 		});
 
 		return successResponse(res, {
@@ -35,7 +36,7 @@ export const submitQuizController = async (req, res, next) => {
 
 export const listQuizzesByCourseController = async (req, res, next) => {
 	try {
-		const quizzes = await getQuizzesByCourse(req.params.courseId);
+		const quizzes = await getQuizzesByCourse(req.params.courseId, req.user);
 		return successResponse(res, {
 			message: 'Quizzes fetched successfully',
 			data: quizzes,
@@ -45,9 +46,22 @@ export const listQuizzesByCourseController = async (req, res, next) => {
 	}
 };
 
+export const getQuizByLessonController = async (req, res, next) => {
+	try {
+		const { courseId, lessonOrder } = req.params;
+		const quiz = await getQuizByLessonOrder(courseId, lessonOrder, req.user);
+		return successResponse(res, {
+			message: quiz ? 'Quiz fetched' : 'No quiz for this lesson',
+			data: quiz, // null means no quiz — not an error
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
 export const getQuizController = async (req, res, next) => {
 	try {
-		const quiz = await getQuizById(req.params.quizId);
+		const quiz = await getQuizById(req.params.quizId, req.user);
 		return successResponse(res, {
 			message: 'Quiz fetched successfully',
 			data: quiz,

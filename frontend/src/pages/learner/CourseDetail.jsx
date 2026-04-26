@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import {
     HiStar, HiClock, HiAcademicCap, HiChevronRight,
     HiCheckCircle, HiLockClosed, HiPlay, HiDocumentText,
-    HiUserGroup, HiOutlineBadgeCheck, HiVideoCamera, HiPhone
+    HiUserGroup, HiOutlineBadgeCheck, HiVideoCamera, HiPhone, HiClipboardList
 } from 'react-icons/hi';
 import { ROUTES } from '../../constants/routes';
 import Button from '../../components/ui/Button';
@@ -11,7 +11,7 @@ import Badge from '../../components/ui/Badge';
 import Tabs from '../../components/ui/Tabs';
 import Avatar from '../../components/ui/Avatar';
 import ProgressBar from '../../components/ui/ProgressBar';
-import { fetchCourseDetails, enrollInCourse, checkEnrollment, sendMessageAPI, fetchMessageAccessStatus, requestMessageAccess, fetchMyProgress } from '../../services/learnerApi';
+import { fetchCourseDetails, enrollInCourse, checkEnrollment, sendMessageAPI, fetchMessageAccessStatus, requestMessageAccess, fetchMyProgress, fetchQuizzesByCourse } from '../../services/learnerApi';
 import CallModal from '../../components/communication/CallModal';
 import { useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
@@ -25,6 +25,7 @@ export default function CourseDetail() {
     const [loading, setLoading] = useState(true);
     const [enrolled, setEnrolled] = useState(false);
     const [completedLessons, setCompletedLessons] = useState(new Set());
+    const [courseQuizzes, setCourseQuizzes] = useState([]);
     const [enrolling, setEnrolling] = useState(false);
     const [callConfig, setCallConfig] = useState({ isOpen: false, channel: '', isVideo: true });
     const [messageText, setMessageText] = useState('');
@@ -68,6 +69,20 @@ export default function CourseDetail() {
                 }
             })
             .catch(() => {});
+    }, [courseId, token]);
+
+    useEffect(() => {
+        if (!token || !courseId) {
+            setCourseQuizzes([]);
+            return;
+        }
+
+        fetchQuizzesByCourse(courseId)
+            .then((data) => setCourseQuizzes(Array.isArray(data) ? data : []))
+            .catch((error) => {
+                console.error('Failed to load course quizzes:', error);
+                setCourseQuizzes([]);
+            });
     }, [courseId, token]);
 
     useEffect(() => {
@@ -153,6 +168,67 @@ export default function CourseDetail() {
         }
     };
 
+    const c = course || {};
+    const instructorName = c.instructorId?.name || 'Instructor';
+    const lessons = c.lessons || [];
+    const normalizedLessons = useMemo(() => {
+        if (!Array.isArray(lessons)) return [];
+        const sorted = lessons.slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+        return sorted.map((lesson, index) => {
+            const parsedOrder = Number(lesson.order);
+            return {
+                ...lesson,
+                order: Number.isFinite(parsedOrder) && parsedOrder > 0 ? parsedOrder : index + 1,
+            };
+        });
+    }, [lessons]);
+    const lessonCount = normalizedLessons.length;
+    const quizzesByLessonOrder = useMemo(() => {
+        const map = new Map();
+        (courseQuizzes || []).forEach((quiz) => {
+            const lessonOrder = Number(quiz.lessonOrder);
+            if (!Number.isFinite(lessonOrder) || lessonOrder <= 0) return;
+            if (!map.has(lessonOrder)) {
+                map.set(lessonOrder, []);
+            }
+            map.get(lessonOrder).push(quiz);
+        });
+        return map;
+    }, [courseQuizzes]);
+    const areLessonQuizzesPassed = (order) => {
+        const quizzes = quizzesByLessonOrder.get(Number(order)) || [];
+        if (quizzes.length === 0) {
+            return true;
+        }
+        return quizzes.every((quiz) => quiz.status === 'completed' || quiz.passed);
+    };
+    const isLessonUnlocked = (lesson, index) => {
+        if (!enrolled) {
+            return false;
+        }
+        if (index === 0) {
+            return true;
+        }
+
+        const previousLesson = normalizedLessons[index - 1];
+        if (!previousLesson) {
+            return true;
+        }
+
+        const previousCompleted = completedLessons.has(String(previousLesson._id || previousLesson.id));
+        return previousCompleted && areLessonQuizzesPassed(previousLesson.order);
+    };
+    const firstActionableLesson = normalizedLessons.find((lesson) => {
+        const lessonCompleted = completedLessons.has(String(lesson._id || lesson.id));
+        return !lessonCompleted || !areLessonQuizzesPassed(lesson.order);
+    });
+
+    const tabs = [
+        { key: 'curriculum', label: 'Curriculum', icon: <HiAcademicCap /> },
+        { key: 'description', label: 'Description', icon: <HiDocumentText /> },
+        { key: 'instructor', label: 'Instructor', icon: <HiUserGroup /> },
+    ];
+
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
@@ -170,28 +246,6 @@ export default function CourseDetail() {
             </div>
         );
     }
-
-    const c = course;
-    const instructorName = c.instructorId?.name || 'Instructor';
-    const lessons = c.lessons || [];
-    const normalizedLessons = useMemo(() => {
-        if (!Array.isArray(lessons)) return [];
-        const sorted = lessons.slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
-        return sorted.map((lesson, index) => {
-            const parsedOrder = Number(lesson.order);
-            return {
-                ...lesson,
-                order: Number.isFinite(parsedOrder) && parsedOrder > 0 ? parsedOrder : index + 1,
-            };
-        });
-    }, [lessons]);
-    const lessonCount = normalizedLessons.length;
-
-    const tabs = [
-        { key: 'curriculum', label: 'Curriculum', icon: <HiAcademicCap /> },
-        { key: 'description', label: 'Description', icon: <HiDocumentText /> },
-        { key: 'instructor', label: 'Instructor', icon: <HiUserGroup /> },
-    ];
 
     return (
         <div className="bg-surface-bg min-h-screen">
@@ -250,7 +304,7 @@ export default function CourseDetail() {
                                                 <Link 
                                                     to={`/learner/courses/${courseId}/lessons/${
                                                         // Find first lesson NOT yet completed, or fallback to last
-                                                        normalizedLessons.find(l => !completedLessons.has(String(l._id || l.id)))?.order ||
+                                                        firstActionableLesson?.order ||
                                                         normalizedLessons[normalizedLessons.length - 1]?.order ||
                                                         1
                                                     }`}
@@ -334,40 +388,95 @@ export default function CourseDetail() {
                                             <div className="divide-y divide-surface-border">
                                                 {normalizedLessons.map((lesson, j) => {
                                                     const lid = String(lesson._id || lesson.id);
-                                                    const prevLesson = j > 0 ? normalizedLessons[j - 1] : null;
-                                                    const isLocked = !enrolled || (j > 0 && !!prevLesson && !completedLessons.has(String(prevLesson._id || prevLesson.id)));
+                                                    const isLocked = !isLessonUnlocked(lesson, j);
+                                                    const lessonQuizzes = quizzesByLessonOrder.get(Number(lesson.order)) || [];
+                                                    const lessonQuizzesPassed = areLessonQuizzesPassed(lesson.order);
                                                     
                                                     return (
-                                                        <Link
-                                                            key={lid}
-                                                            to={!isLocked ? `/learner/courses/${courseId}/lessons/${lesson.order}` : '#'}
-                                                            className={`px-6 py-4 flex items-center justify-between group transition-colors ${isLocked ? 'cursor-not-allowed opacity-60' : 'hover:bg-primary-50/30'}`}
-                                                            onClick={(e) => {
-                                                                if (isLocked) {
-                                                                    e.preventDefault();
-                                                                    if (enrolled) toast.error('Complete the previous lessons to unlock this one!');
-                                                                }
-                                                            }}
-                                                        >
-                                                            <div className="flex items-center gap-3 min-w-0">
-                                                                <div className="w-8 h-8 rounded-lg bg-surface-muted flex items-center justify-center text-text-muted group-hover:bg-primary-100 group-hover:text-primary-600 transition-colors">
-                                                                    {lesson.type === 'pdf' ? <HiDocumentText className="w-4 h-4" /> : <HiPlay className="w-4 h-4" />}
+                                                        <div key={lid} className="divide-y divide-surface-border/70">
+                                                            <Link
+                                                                to={!isLocked ? `/learner/courses/${courseId}/lessons/${lesson.order}` : '#'}
+                                                                className={`px-6 py-4 flex items-center justify-between group transition-colors ${isLocked ? 'cursor-not-allowed opacity-60' : 'hover:bg-primary-50/30'}`}
+                                                                onClick={(e) => {
+                                                                    if (isLocked) {
+                                                                        e.preventDefault();
+                                                                        if (enrolled) toast.error('Complete the previous lessons to unlock this one!');
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <div className="flex items-center gap-3 min-w-0">
+                                                                    <div className="w-8 h-8 rounded-lg bg-surface-muted flex items-center justify-center text-text-muted group-hover:bg-primary-100 group-hover:text-primary-600 transition-colors">
+                                                                        {lesson.type === 'pdf' ? <HiDocumentText className="w-4 h-4" /> : <HiPlay className="w-4 h-4" />}
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-sm font-medium text-text-secondary truncate">{lesson.title}</p>
+                                                                        {lesson.duration && (
+                                                                            <p className="text-xs text-text-muted">
+                                                                                {typeof lesson.duration === 'number' ? formatDuration(lesson.duration) : lesson.duration}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
-                                                                <div>
-                                                                    <p className="text-sm font-medium text-text-secondary truncate">{lesson.title}</p>
-                                                                    {lesson.duration && (
-                                                                        <p className="text-xs text-text-muted">
-                                                                            {typeof lesson.duration === 'number' ? formatDuration(lesson.duration) : lesson.duration}
-                                                                        </p>
+                                                                <div className="flex items-center gap-4 text-xs text-text-muted">
+                                                                    <Badge color={lesson.type === 'pdf' ? 'rose' : 'blue'} className="text-[9px]">{(lesson.type || 'video').toUpperCase()}</Badge>
+                                                                    {isLocked && <HiLockClosed className="opacity-40 w-4 h-4" />}
+                                                                    {completedLessons.has(lid) && <HiCheckCircle className="text-emerald-500 w-4 h-4" />}
+                                                                    {completedLessons.has(lid) && lessonQuizzes.length > 0 && !lessonQuizzesPassed && (
+                                                                        <Badge color="amber" className="text-[9px]">QUIZ PENDING</Badge>
                                                                     )}
                                                                 </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-4 text-xs text-text-muted">
-                                                                <Badge color={lesson.type === 'pdf' ? 'rose' : 'blue'} className="text-[9px]">{(lesson.type || 'video').toUpperCase()}</Badge>
-                                                                {isLocked && <HiLockClosed className="opacity-40 w-4 h-4" />}
-                                                                {completedLessons.has(lid) && <HiCheckCircle className="text-emerald-500 w-4 h-4" />}
-                                                            </div>
-                                                        </Link>
+                                                            </Link>
+                                                            {lessonQuizzes.map((lessonQuiz) => {
+                                                                const quizStatus = lessonQuiz?.status || 'available';
+                                                                const isQuizLocked = !enrolled || quizStatus === 'locked';
+                                                                const quizTarget = quizStatus === 'completed'
+                                                                    ? `/learner/quiz/${lessonQuiz?._id}/results`
+                                                                    : `/learner/quiz/${lessonQuiz?._id}/attempt`;
+
+                                                                return (
+                                                                    <Link
+                                                                        key={lessonQuiz._id}
+                                                                        to={!isQuizLocked ? quizTarget : '#'}
+                                                                        className={`px-6 py-3 ml-6 flex items-center justify-between transition-colors bg-slate-50/70 ${isQuizLocked ? 'cursor-not-allowed opacity-75' : 'hover:bg-amber-50/70'}`}
+                                                                        onClick={(e) => {
+                                                                            if (isQuizLocked) {
+                                                                                e.preventDefault();
+                                                                                toast.error(lessonQuiz.requirement || 'Finish this lesson to unlock the quiz.');
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        <div className="flex items-center gap-3 min-w-0">
+                                                                            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                                                                                <HiClipboardList className="w-4 h-4" />
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="text-sm font-semibold text-text-primary truncate">{lessonQuiz.title}</p>
+                                                                                <p className="text-xs text-text-muted">
+                                                                                    {lessonQuiz.questionCount || lessonQuiz.questions?.length || 0} questions · Pass score {lessonQuiz.passingScore || 60}%
+                                                                                </p>
+                                                                                {isQuizLocked && (
+                                                                                    <p className="text-xs text-amber-700 mt-1">
+                                                                                        {lessonQuiz.requirement || 'Finish this lesson to unlock the quiz.'}
+                                                                                    </p>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-3 text-xs">
+                                                                            {quizStatus === 'completed' && <Badge color="green">COMPLETED</Badge>}
+                                                                            {quizStatus === 'available' && <Badge color="blue">AVAILABLE</Badge>}
+                                                                            {quizStatus === 'locked' && <Badge color="gray">LOCKED</Badge>}
+                                                                            {isQuizLocked && <HiLockClosed className="opacity-50 w-4 h-4 text-slate-500" />}
+                                                                            {quizStatus === 'completed' && <HiCheckCircle className="text-emerald-500 w-4 h-4" />}
+                                                                        </div>
+                                                                    </Link>
+                                                                );
+                                                            })}
+                                                            {lessonQuizzes.length > 0 && (
+                                                                <div className="px-6 py-2 ml-6 bg-slate-50/40 text-[11px] font-semibold text-slate-500">
+                                                                    {lessonQuizzes.length} quiz{lessonQuizzes.length === 1 ? '' : 'zes'} attached to this lesson
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     );
                                                 })}
                                             </div>

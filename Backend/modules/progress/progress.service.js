@@ -1,6 +1,6 @@
 import Course from '../course/course.model.js';
 import Progress from './progress.model.js';
-import Lesson from '../lesson/lesson.model.js';
+import { countLessonsByCourseId } from '../lesson/lesson.service.js';
 
 import { createAppError } from '../../utils/constants.js';
 
@@ -20,7 +20,7 @@ export const upsertProgress = async ({ userId, courseId, lessonId }) => {
 	}
 
 	// Recalculate percentage based on total lessons
-	const totalLessons = await Lesson.countDocuments({ courseId });
+	const totalLessons = await countLessonsByCourseId(courseId);
 	if (totalLessons > 0) {
 		progress.completionPercentage = Math.round((progress.completedLessons.length / totalLessons) * 100);
 	} else {

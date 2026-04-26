@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     HiAcademicCap, HiDownload, HiShare, HiExternalLink,
     HiCheckCircle, HiChevronRight, HiStar, HiLink,
@@ -6,6 +6,8 @@ import {
 } from 'react-icons/hi';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import Button from '../../components/ui/Button';
 import { fetchMyCertificates } from '../../services/learnerApi';
 
@@ -146,25 +148,48 @@ export default function CertificatesPage() {
 function CertificateCard({ cert }) {
     const [downloading, setDownloading] = useState(false);
     const [copied, setCopied] = useState(false);
+    const certificateRef = useRef(null);
 
-    const handleDownload = () => {
+    const handleDownload = async () => {
         setDownloading(true);
 
-        // Simulate real file download trigger
-        setTimeout(() => {
-            const fileName = `${cert.title.replace(/\s+/g, '_')}_Certificate.pdf`;
-            const dummyContent = `Certificate of Completion\n\nTitle: ${cert.title}\nIssued By: ${cert.issuedBy}\nID: ${cert.idCode}\nDate: ${cert.date}\nScore: ${cert.score}`;
-            const blob = new Blob([dummyContent], { type: 'application/pdf' });
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', fileName);
-            document.body.appendChild(link);
-            link.click();
-            link.parentNode.removeChild(link);
+        try {
+            if (!certificateRef.current) {
+                throw new Error('Certificate preview not available');
+            }
 
+            const canvas = await html2canvas(certificateRef.current, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#ffffff',
+            });
+            const imageData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('landscape', 'mm', 'a4');
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const margin = 10;
+            const availableWidth = pageWidth - margin * 2;
+            const availableHeight = pageHeight - margin * 2;
+            const imageRatio = canvas.width / canvas.height;
+            let renderWidth = availableWidth;
+            let renderHeight = renderWidth / imageRatio;
+
+            if (renderHeight > availableHeight) {
+                renderHeight = availableHeight;
+                renderWidth = renderHeight * imageRatio;
+            }
+
+            const x = (pageWidth - renderWidth) / 2;
+            const y = (pageHeight - renderHeight) / 2;
+
+            pdf.addImage(imageData, 'PNG', x, y, renderWidth, renderHeight);
+            const fileName = `${cert.title.replace(/\s+/g, '_')}_Certificate.pdf`;
+            pdf.save(fileName);
+        } catch (error) {
+            console.error('Failed to download certificate:', error);
+        } finally {
             setDownloading(false);
-        }, 1500);
+        }
     };
 
     const handleCopyCode = () => {
@@ -186,87 +211,139 @@ function CertificateCard({ cert }) {
     };
 
     return (
-        <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-indigo-100/50 hover:-translate-y-2 transition-all duration-500 overflow-hidden flex flex-col group">
+        <>
+            <div
+                ref={certificateRef}
+                className="fixed left-[-9999px] top-0 w-[1120px] bg-white text-slate-900"
+                aria-hidden="true"
+            >
+                <div className="relative overflow-hidden border-[14px] border-slate-900 p-16">
+                    <div className={`absolute inset-x-0 top-0 h-5 bg-gradient-to-r ${cert.gradient}`} />
+                    <div className={`absolute inset-x-0 bottom-0 h-5 bg-gradient-to-r ${cert.gradient}`} />
+                    <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-indigo-100/60 blur-3xl" />
+                    <div className="absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-violet-100/60 blur-3xl" />
 
-            {/* Top Half: Premium Header */}
-            <div className={`h-48 bg-gradient-to-br ${cert.gradient} relative p-8 flex flex-col justify-between overflow-hidden`}>
-                <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000" />
-                <div className="absolute -left-6 bottom-6 w-28 h-28 bg-black/5 rounded-full blur-2xl" />
+                    <div className="relative z-10 text-center space-y-8" style={sora}>
+                        <p className="text-sm font-black uppercase tracking-[0.45em] text-slate-400">Certificate of Completion</p>
+                        <div className="space-y-3">
+                            <h1 className="text-5xl font-black tracking-tight text-slate-900">{cert.title}</h1>
+                            <p className="text-lg font-semibold text-slate-500">Presented by {cert.issuedBy}</p>
+                        </div>
 
-                <div className="flex justify-between items-start relative z-10">
-                    <div className="bg-amber-400 text-[9px] font-black text-slate-900 px-4 py-1.5 rounded-full flex items-center gap-2 shadow-lg shadow-amber-500/20">
-                        <div className="w-1.5 h-1.5 bg-slate-900 rounded-full animate-pulse" />
-                        CERTIFIED
-                    </div>
-                    <HiAcademicCap className="w-10 h-10 text-white/20 group-hover:text-white/40 transition-colors" />
-                </div>
+                        <div className="mx-auto max-w-3xl space-y-6 pt-4">
+                            <p className="text-base text-slate-500">This certifies successful completion of the course requirements and final assessments.</p>
+                            <div className="grid grid-cols-3 gap-6 pt-6">
+                                <div className="rounded-3xl border border-slate-200 bg-slate-50 px-6 py-5">
+                                    <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Issued</p>
+                                    <p className="mt-2 text-lg font-black text-slate-900">{cert.date}</p>
+                                </div>
+                                <div className="rounded-3xl border border-slate-200 bg-slate-50 px-6 py-5">
+                                    <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Credential ID</p>
+                                    <p className="mt-2 text-lg font-black text-slate-900" style={mono}>{cert.idCode}</p>
+                                </div>
+                                <div className="rounded-3xl border border-slate-200 bg-slate-50 px-6 py-5">
+                                    <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Result</p>
+                                    <p className="mt-2 text-lg font-black text-emerald-600">{cert.score}</p>
+                                </div>
+                            </div>
+                        </div>
 
-                <div className="relative z-10 space-y-2">
-                    <h3 className="text-xl font-black text-white leading-tight tracking-tight">
-                        {cert.title}
-                    </h3>
-                    <p className="text-[10px] text-white/60 font-black uppercase tracking-[0.2em]" style={mono}>
-                        Issued on {cert.date}
-                    </p>
-                </div>
-            </div>
-
-            {/* Bottom Half: Info Grid */}
-            <div className="p-8 space-y-8 flex-1 bg-white">
-                <div className="grid grid-cols-2 gap-y-6 gap-x-4">
-                    <div className="space-y-1">
-                        <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Issuer</p>
-                        <p className="text-[11px] font-black text-slate-800">{cert.issuedBy}</p>
-                    </div>
-                    <div className="space-y-1 text-right">
-                        <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Mastery</p>
-                        <p className="text-[11px] font-black text-emerald-600" style={mono}>{cert.score}</p>
-                    </div>
-                    <div className="space-y-1">
-                        <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Credential ID</p>
-                        <p className="text-[10px] font-black text-slate-500" style={mono}>{cert.idCode}</p>
-                    </div>
-                    <div className="space-y-1 text-right">
-                        <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Validation</p>
-                        <div className="flex items-center justify-end gap-1.5 text-[10px] font-black text-emerald-500 uppercase tracking-widest">
-                            <HiCheckCircle className="w-4 h-4" /> VERIFIED
+                        <div className="flex items-end justify-between pt-10 text-left">
+                            <div>
+                                <div className="h-px w-56 bg-slate-300" />
+                                <p className="mt-3 text-sm font-black uppercase tracking-[0.2em] text-slate-500">Authorized by {cert.issuedBy}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Verified Certificate</p>
+                                <p className="mt-2 text-base font-semibold text-slate-600">Download generated from learner dashboard</p>
+                            </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <div className="h-px bg-slate-50 w-full" />
+            <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-indigo-100/50 hover:-translate-y-2 transition-all duration-500 overflow-hidden flex flex-col group">
 
-                {/* Actions */}
-                <div className="flex gap-3">
-                    <button
-                        onClick={handleDownload}
-                        disabled={downloading}
-                        className={clsx(
-                            "flex-1 text-[10px] font-black uppercase tracking-widest py-3 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.95] shadow-sm",
-                            downloading
-                                ? "bg-indigo-50 text-indigo-500 border border-indigo-100"
-                                : "bg-slate-50 hover:bg-indigo-600 hover:text-white hover:shadow-lg hover:shadow-indigo-100 text-slate-600 border border-slate-100"
-                        )}
-                    >
-                        {downloading ? (
-                            <><div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" /> Preparing...</>
-                        ) : (
-                            <><HiDownload className="w-4 h-4" /> Download PDF</>
-                        )}
-                    </button>
-                    <button
-                        onClick={handleCopyCode}
-                        className={clsx(
-                            "p-3 rounded-2xl border transition-all active:scale-[0.95] flex items-center justify-center",
-                            copied
-                                ? "bg-emerald-50 border-emerald-100 text-emerald-500"
-                                : "bg-slate-50 border-slate-100 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-100"
-                        )}
-                    >
-                        {copied ? <HiClipboardCheck className="w-5 h-5" /> : <HiLink className="w-5 h-5" />}
-                    </button>
+                {/* Top Half: Premium Header */}
+                <div className={`h-48 bg-gradient-to-br ${cert.gradient} relative p-8 flex flex-col justify-between overflow-hidden`}>
+                    <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000" />
+                    <div className="absolute -left-6 bottom-6 w-28 h-28 bg-black/5 rounded-full blur-2xl" />
+
+                    <div className="flex justify-between items-start relative z-10">
+                        <div className="bg-amber-400 text-[9px] font-black text-slate-900 px-4 py-1.5 rounded-full flex items-center gap-2 shadow-lg shadow-amber-500/20">
+                            <div className="w-1.5 h-1.5 bg-slate-900 rounded-full animate-pulse" />
+                            CERTIFIED
+                        </div>
+                        <HiAcademicCap className="w-10 h-10 text-white/20 group-hover:text-white/40 transition-colors" />
+                    </div>
+
+                    <div className="relative z-10 space-y-2">
+                        <h3 className="text-xl font-black text-white leading-tight tracking-tight">
+                            {cert.title}
+                        </h3>
+                        <p className="text-[10px] text-white/60 font-black uppercase tracking-[0.2em]" style={mono}>
+                            Issued on {cert.date}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Bottom Half: Info Grid */}
+                <div className="p-8 space-y-8 flex-1 bg-white">
+                    <div className="grid grid-cols-2 gap-y-6 gap-x-4">
+                        <div className="space-y-1">
+                            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Issuer</p>
+                            <p className="text-[11px] font-black text-slate-800">{cert.issuedBy}</p>
+                        </div>
+                        <div className="space-y-1 text-right">
+                            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Mastery</p>
+                            <p className="text-[11px] font-black text-emerald-600" style={mono}>{cert.score}</p>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Credential ID</p>
+                            <p className="text-[10px] font-black text-slate-500" style={mono}>{cert.idCode}</p>
+                        </div>
+                        <div className="space-y-1 text-right">
+                            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Validation</p>
+                            <div className="flex items-center justify-end gap-1.5 text-[10px] font-black text-emerald-500 uppercase tracking-widest">
+                                <HiCheckCircle className="w-4 h-4" /> VERIFIED
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="h-px bg-slate-50 w-full" />
+
+                    {/* Actions */}
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleDownload}
+                            disabled={downloading}
+                            className={clsx(
+                                "flex-1 text-[10px] font-black uppercase tracking-widest py-3 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.95] shadow-sm",
+                                downloading
+                                    ? "bg-indigo-50 text-indigo-500 border border-indigo-100"
+                                    : "bg-slate-50 hover:bg-indigo-600 hover:text-white hover:shadow-lg hover:shadow-indigo-100 text-slate-600 border border-slate-100"
+                            )}
+                        >
+                            {downloading ? (
+                                <><div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" /> Preparing...</>
+                            ) : (
+                                <><HiDownload className="w-4 h-4" /> Download PDF</>
+                            )}
+                        </button>
+                        <button
+                            onClick={handleCopyCode}
+                            className={clsx(
+                                "p-3 rounded-2xl border transition-all active:scale-[0.95] flex items-center justify-center",
+                                copied
+                                    ? "bg-emerald-50 border-emerald-100 text-emerald-500"
+                                    : "bg-slate-50 border-slate-100 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-100"
+                            )}
+                        >
+                            {copied ? <HiClipboardCheck className="w-5 h-5" /> : <HiLink className="w-5 h-5" />}
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }

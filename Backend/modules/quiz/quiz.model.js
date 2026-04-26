@@ -55,6 +55,10 @@ const quizSchema = new mongoose.Schema(
 			min: 0,
 			max: 100,
 		},
+		lessonOrder: {
+			type: Number,
+			default: null,
+		},
 		createdBy: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: 'User',
