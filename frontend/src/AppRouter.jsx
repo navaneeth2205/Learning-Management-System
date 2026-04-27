@@ -31,6 +31,7 @@ import LeaderboardPage from './pages/learner/LeaderboardPage';
 import GradesPage from './pages/learner/GradesPage';
 import ProgressDashboard from './pages/learner/ProgressDashboard';
 import CertificatesPage from './pages/learner/CertificatesPage';
+import CertificateVerifyPage from './pages/learner/CertificateVerifyPage';
 import CommunityPage from './pages/learner/CommunityPage';
 import DiscussionDetail from './pages/learner/DiscussionDetail';
 
@@ -45,6 +46,7 @@ import InstructorQuizzes from './pages/instructor/InstructorQuizzes';
 import QuizBuilder from './pages/instructor/QuizBuilder';
 import QuizAnalytics from './pages/instructor/QuizAnalytics';
 import AccessRequests from './pages/instructor/AccessRequests';
+import InstructorAssignmentsPage from './pages/instructor/InstructorAssignmentsPage';
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagement from './pages/admin/UserManagement';
@@ -69,6 +71,7 @@ export default function AppRouter() {
             <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />
             <Route path={ROUTES.RESET_PASSWORD} element={<ResetPasswordPage />} />
             <Route path={ROUTES.OTP_VERIFY} element={<OtpVerifyPage />} />
+            <Route path={ROUTES.CERTIFICATE_VERIFY} element={<CertificateVerifyPage />} />
 
             {/* Learner Routes */}
             <Route
@@ -113,6 +116,7 @@ export default function AppRouter() {
                 <Route path="dashboard" element={<InstructorDashboard />} />
                 <Route path="courses" element={<CourseManagement />} />
                 <Route path="courses/create" element={<CreateCourse />} />
+                <Route path="assignments" element={<InstructorAssignmentsPage />} />
                 <Route path="submissions" element={<SubmissionsReview />} />
                 <Route path="grading" element={<GradingWorkspace />} />
                 <Route path="grading/:id" element={<GradingWorkspace />} />

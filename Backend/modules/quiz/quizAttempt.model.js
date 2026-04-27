@@ -13,12 +13,13 @@ const quizAttemptSchema = new mongoose.Schema(
 			required: true,
 		},
 		answers: {
-			type: [String],
+			type: [mongoose.Schema.Types.Mixed],
 			required: true,
 		},
 		score: {
 			type: Number,
-			required: true,
+			required: false,
+			default: null,
 			min: 0,
 		},
 		total: {
@@ -28,17 +29,37 @@ const quizAttemptSchema = new mongoose.Schema(
 		},
 		percentage: {
 			type: Number,
-			required: true,
+			required: false,
+			default: null,
 			min: 0,
 			max: 100,
 		},
 		passed: {
 			type: Boolean,
-			default: false,
+			default: null,
+		},
+		status: {
+			type: String,
+			enum: ['pending', 'reviewed'],
+			default: 'pending',
 		},
 		timeTaken: {
 			type: Number,
 			default: 0,
+		},
+		feedback: {
+			type: String,
+			default: '',
+			trim: true,
+		},
+		reviewedBy: {
+			type: mongoose.Schema.Types.ObjectId,
+			ref: 'User',
+			default: null,
+		},
+		reviewedAt: {
+			type: Date,
+			default: null,
 		},
 		completedAt: {
 			type: Date,

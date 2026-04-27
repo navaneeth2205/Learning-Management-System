@@ -10,6 +10,7 @@ import {
 	getCourseDetailController,
 	updateCourseController,
 	deleteCourseController,
+	createCourseClassroomController,
 } from './course.controller.js';
 
 import { uploadThumbnail } from '../../middleware/upload.middleware.js';
@@ -19,6 +20,7 @@ const router = express.Router();
 router.post('/', authenticate, isInstructorOrAdmin, uploadThumbnail.single('thumbnail'), createCourseController);
 router.get('/', getAllCoursesController);
 router.get('/instructor/me', authenticate, isInstructorOrAdmin, getInstructorCoursesController);
+router.post('/:courseId/classroom', authenticate, isInstructorOrAdmin, createCourseClassroomController);
 router.get('/:courseId', getSingleCourseController);
 router.get('/:courseId/details', getCourseDetailController);
 router.put('/:courseId', authenticate, isInstructorOrAdmin, updateCourseController);

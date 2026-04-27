@@ -1,17 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { HiPlus, HiTrash, HiChevronLeft, HiEye, HiCog, HiOutlineDocumentText, HiMenu, HiCheck } from 'react-icons/hi';
+import toast from 'react-hot-toast';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import QuestionCard from '../../components/quiz/QuestionCard';
 import clsx from 'clsx';
+import { createQuiz, fetchInstructorCourses } from '../../services/instructorApi';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export default function QuizBuilder() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const [courses, setCourses] = useState([]);
+    const [saving, setSaving] = useState(false);
 
     const [activeTab, setActiveTab] = useState('questions'); // 'questions' | 'settings'
     const [previewMode, setPreviewMode] = useState(false);
@@ -56,6 +60,22 @@ export default function QuizBuilder() {
         }
     }, [questions, activeQuestionId]);
 
+    useEffect(() => {
+        let mounted = true;
+        fetchInstructorCourses()
+            .then((data) => {
+                if (!mounted) return;
+                setCourses(Array.isArray(data) ? data : []);
+            })
+            .catch(() => {
+                if (mounted) setCourses([]);
+            });
+
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
     const activeQuestion = questions.find(q => q.id === activeQuestionId);
 
     const updateActiveQuestion = (updates) => {
@@ -95,10 +115,85 @@ export default function QuizBuilder() {
         const defaults = {
             mcq: { options: [{ id: generateId(), text: '' }, { id: generateId(), text: '' }], correctOption: null },
             true_false: { options: [], correctOption: null },
-            short_answer: { options: [], correctOption: null, sampleAnswer: '' }
+            short_answer: { options: [], correctOption: null, sampleAnswer: '' },
+            survey: { options: [], correctOption: null, sampleAnswer: '' },
         };
 
         updateActiveQuestion({ type: newType, ...defaults[newType] });
+    };
+
+    const normalizeQuestionForApi = (question) => {
+        const typeMap = {
+            mcq: 'multiple_choice',
+            true_false: 'true_false',
+            short_answer: 'descriptive',
+            survey: 'survey',
+        };
+
+        const mappedType = typeMap[question.type] || 'multiple_choice';
+        const options = question.type === 'mcq'
+            ? (question.options || []).map((option) => String(option.text || '').trim()).filter(Boolean)
+            : question.type === 'true_false'
+                ? ['True', 'False']
+                : [];
+
+        let correctAnswer = '';
+        if (question.type === 'mcq') {
+            const selected = (question.options || []).find((option) => option.id === question.correctOption);
+            correctAnswer = String(selected?.text || '').trim();
+        } else if (question.type === 'true_false') {
+            correctAnswer = question.correctOption === 'true' ? 'True' : question.correctOption === 'false' ? 'False' : '';
+        } else if (question.type === 'short_answer') {
+            correctAnswer = String(question.sampleAnswer || '').trim();
+        }
+
+        return {
+            type: mappedType,
+            question: String(question.text || '').trim(),
+            options,
+            correctAnswer,
+            points: Number(question.points) > 0 ? Number(question.points) : 1,
+            explanation: String(question.explanation || '').trim(),
+        };
+    };
+
+    const handlePublishQuiz = async () => {
+        if (!quizSettings.title?.trim()) {
+            toast.error('Quiz title is required');
+            return;
+        }
+
+        if (!quizSettings.course) {
+            toast.error('Please select a course');
+            return;
+        }
+
+        const normalizedQuestions = questions
+            .map(normalizeQuestionForApi)
+            .filter((question) => question.question && (question.type === 'survey' || question.correctAnswer));
+
+        if (normalizedQuestions.length === 0) {
+            toast.error('Add at least one valid question before publishing');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            await createQuiz({
+                courseId: quizSettings.course,
+                title: quizSettings.title,
+                timeLimit: quizSettings.timed ? Number(quizSettings.timeLimit) || 30 : 30,
+                passingScore: Number(quizSettings.passMark) || 70,
+                questions: normalizedQuestions,
+            });
+
+            toast.success('Quiz published successfully');
+            navigate('/instructor/quizzes');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to publish quiz');
+        } finally {
+            setSaving(false);
+        }
     };
 
     // Drag and Drop
@@ -131,7 +226,7 @@ export default function QuizBuilder() {
                     <Button variant="ghost" onClick={() => setPreviewMode(!previewMode)} icon={<HiEye />} className={previewMode ? "bg-blue-50 text-blue-600" : ""}>
                         {previewMode ? "Exit Preview" : "Preview"}
                     </Button>
-                    <Button onClick={() => navigate('/instructor/quizzes')} className="bg-primary-600">Publish Quiz</Button>
+                    <Button onClick={handlePublishQuiz} className="bg-primary-600" disabled={saving}>{saving ? 'Publishing...' : 'Publish Quiz'}</Button>
                 </div>
             </header>
 
@@ -197,6 +292,19 @@ export default function QuizBuilder() {
                                         onChange={e => setQuizSettings({ ...quizSettings, title: e.target.value })}
                                     />
                                     <div>
+                                        <label className="block text-sm font-medium text-slate-500 mb-1">Course</label>
+                                        <select
+                                            value={quizSettings.course}
+                                            onChange={(e) => setQuizSettings({ ...quizSettings, course: e.target.value })}
+                                            className="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all bg-white"
+                                        >
+                                            <option value="">Select course</option>
+                                            {courses.map((course) => (
+                                                <option key={course._id || course.id} value={course._id || course.id}>{course.title}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
                                         <label className="block text-sm font-medium text-slate-500 mb-1">Instructions for Learner</label>
                                         <textarea
                                             rows={4}
@@ -248,7 +356,7 @@ export default function QuizBuilder() {
                             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 space-y-8 animate-in fade-in transition-all">
                                 {/* Type Selector */}
                                 <div className="flex p-1 bg-slate-100 rounded-xl w-fit">
-                                    {['mcq', 'true_false', 'short_answer'].map(t => (
+                                    {['mcq', 'true_false', 'short_answer', 'survey'].map(t => (
                                         <button
                                             key={t}
                                             onClick={() => handleTypeChange(t)}

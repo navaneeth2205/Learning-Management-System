@@ -1,6 +1,7 @@
 import Course from '../course/course.model.js';
 import Enrollment from './enrollment.model.js';
 import Progress from '../progress/progress.model.js';
+import { createNotification } from '../notification/notification.service.js';
 
 import { createAppError } from '../../utils/constants.js';
 
@@ -26,6 +27,25 @@ export const enrollInCourse = async ({ userId, courseId }) => {
 
 	// Increment enrolled count on course
 	await Course.findByIdAndUpdate(courseId, { $inc: { enrolledCount: 1 } });
+
+	if (course.googleClassroom?.id) {
+		await createNotification({
+			recipientId: userId,
+			title: `Join ${course.title} on Google Classroom`,
+			message: course.googleClassroom.alternateLink
+				? `Your instructor already created the Google Classroom for this course. Open the join link and use code ${course.googleClassroom.enrollmentCode || 'shown on the classroom page'}.`
+				: `Your instructor already created the Google Classroom for this course. Use code ${course.googleClassroom.enrollmentCode || 'shared by your instructor'} to join.`,
+			type: 'classroom',
+			link: course.googleClassroom.alternateLink || '',
+			data: {
+				courseId: String(course._id),
+				courseTitle: course.title,
+				classroomId: course.googleClassroom.id,
+				classroomLink: course.googleClassroom.alternateLink || '',
+				enrollmentCode: course.googleClassroom.enrollmentCode || '',
+			},
+		});
+	}
 
 	return enrollment;
 };

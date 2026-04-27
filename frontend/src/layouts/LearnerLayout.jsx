@@ -4,7 +4,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import {
     Home, Search, BookOpen, FileText, Award, BarChart2,
     Megaphone, MessageSquare, Users, User, Menu, Bell,
-    AlertTriangle, GraduationCap,
+    GraduationCap,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { logout } from '../features/auth/authSlice';
@@ -13,6 +13,7 @@ import Avatar from '../components/ui/Avatar';
 import clsx from 'clsx';
 import NotificationCenter from '../components/ui/NotificationCenter';
 import { fetchCourses } from '../services/learnerApi';
+import { useNotifications } from '../hooks/useNotifications';
 
 const sidebarSections = [
     {
@@ -58,12 +59,7 @@ export default function LearnerLayout() {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [isSearchFocused, setIsSearchFocused] = useState(false);
-    const [notifications, setNotifications] = useState([
-        { id: 1, type: 'course', title: 'Course Completed!', message: 'Congratulations! You have completed "Advanced React Patterns". Check your rewards.', time: '2 mins ago', unread: true, icon: GraduationCap, color: 'green' },
-        { id: 2, type: 'message', title: 'New message from Dr. Sarah', message: 'I have reviewed your last assignment. Great work on the state management part.', time: '1 hour ago', unread: true, icon: MessageSquare, color: 'blue' },
-        { id: 3, type: 'platform', title: 'Maintenance Update', message: 'Systems will be down for scheduled maintenance tonight at 12:00 PM EST.', time: '5 hours ago', unread: false, icon: AlertTriangle, color: 'amber' },
-        { id: 4, type: 'enrollment', title: 'New Student Enrollment', message: 'Alex Johnson has enrolled in your "UI Design Fundamentals" course.', time: '1 day ago', unread: false, icon: Users, color: 'purple' }
-    ]);
+    const { notifications, handleMarkRead, handleMarkAllRead } = useNotifications();
 
     useEffect(() => {
         const query = searchQuery.trim();
@@ -110,17 +106,14 @@ export default function LearnerLayout() {
 
     return (
         <div className="flex h-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
-            {/* Mobile overlay */}
             {sidebarOpen && (
                 <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
             )}
 
-            {/* Sidebar */}
             <aside className={clsx(
                 'fixed lg:relative z-50 h-full bg-white border-r border-slate-100 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0',
                 sidebarOpen ? (collapsed ? 'w-20' : 'w-72') : 'w-0 lg:w-20'
             )}>
-                {/* Brand Logo */}
                 <div className={clsx('flex items-center gap-3 px-8 py-8 flex-shrink-0', collapsed && 'justify-center px-2')}>
                     <div className="w-10 h-10 bg-primary-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-100">
                         <GraduationCap className="w-6 h-6 text-white" />
@@ -132,7 +125,6 @@ export default function LearnerLayout() {
                     )}
                 </div>
 
-                {/* Navigation Sections */}
                 <div className="flex-1 overflow-y-auto px-4 custom-scrollbar space-y-6 py-6">
                     {sidebarSections.map((section, idx) => (
                         <div key={idx} className="space-y-1">
@@ -178,13 +170,9 @@ export default function LearnerLayout() {
                         </div>
                     ))}
                 </div>
-
-                {/* Removed Logout area from Sidebar */}
             </aside>
 
-            {/* Main Content Area */}
             <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-                {/* Header */}
                 <header className="h-16 lg:h-20 bg-white border-b border-slate-100 flex items-center justify-between px-8 flex-shrink-0 z-20">
                     <div className="flex items-center gap-6 flex-1 max-w-xl">
                         <button
@@ -209,7 +197,6 @@ export default function LearnerLayout() {
                                 className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:bg-white transition-all font-medium placeholder-slate-400"
                             />
 
-                            {/* Search Results Dropdown */}
                             {isSearchFocused && searchQuery.trim().length > 0 && (
                                 <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-[24px] border border-slate-100 shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-300">
                                     <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
@@ -295,7 +282,6 @@ export default function LearnerLayout() {
                     </div>
                 </header>
 
-                {/* Page content */}
                 <main className="flex-1 overflow-y-auto bg-slate-50 custom-scrollbar">
                     <div className="p-8 max-w-[1600px] mx-auto min-h-full">
                         <Outlet />
@@ -307,7 +293,8 @@ export default function LearnerLayout() {
                 isOpen={notificationsOpen}
                 onClose={() => setNotificationsOpen(false)}
                 notifications={notifications}
-                setNotifications={setNotifications}
+                onMarkRead={handleMarkRead}
+                onMarkAllRead={handleMarkAllRead}
             />
         </div>
     );

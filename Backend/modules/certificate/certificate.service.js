@@ -2,6 +2,7 @@ import crypto from 'crypto';
 
 import Certificate from './certificate.model.js';
 import Progress from '../progress/progress.model.js';
+import { recalculateProgressForCourse } from '../progress/progress.service.js';
 import Enrollment from '../enrollment/enrollment.model.js';
 import Course from '../course/course.model.js';
 
@@ -20,7 +21,11 @@ export const issueCertificate = async ({ userId, courseId }) => {
 		throw createAppError('User is not enrolled in this course', 400);
 	}
 
-	const progress = await Progress.findOne({ userId, courseId });
+	const progress = await recalculateProgressForCourse({
+		userId,
+		courseId,
+		progressRecord: await Progress.findOne({ userId, courseId }),
+	});
 	if (!progress || progress.completionPercentage < 100) {
 		throw createAppError('Course not fully completed yet', 400);
 	}

@@ -2,6 +2,11 @@ import mongoose from 'mongoose';
 
 const quizQuestionSchema = new mongoose.Schema(
 	{
+		type: {
+			type: String,
+			enum: ['multiple_choice', 'true_false', 'descriptive', 'survey'],
+			default: 'multiple_choice',
+		},
 		question: {
 			type: String,
 			required: true,
@@ -9,15 +14,33 @@ const quizQuestionSchema = new mongoose.Schema(
 		},
 		options: {
 			type: [String],
-			required: true,
+			default: [],
 			validate: {
-				validator: (value) => Array.isArray(value) && value.length >= 2,
-				message: 'Each question must have at least two options',
+				validator: function validateOptions(value) {
+					if (this.type === 'descriptive' || this.type === 'survey') {
+						return true;
+					}
+					return Array.isArray(value) && value.filter(Boolean).length >= 2;
+				},
+				message: 'Multiple choice and true/false questions must have at least two options',
 			},
 		},
 		correctAnswer: {
 			type: String,
-			required: true,
+			required: function requiredCorrectAnswer() {
+				return this.type !== 'survey';
+			},
+			trim: true,
+			default: '',
+		},
+		points: {
+			type: Number,
+			default: 1,
+			min: 1,
+		},
+		explanation: {
+			type: String,
+			default: '',
 			trim: true,
 		},
 	},

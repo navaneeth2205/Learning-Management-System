@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import {
     HiStar, HiClock, HiAcademicCap, HiChevronRight,
     HiCheckCircle, HiLockClosed, HiPlay, HiDocumentText,
-    HiUserGroup, HiOutlineBadgeCheck, HiVideoCamera, HiPhone, HiClipboardList
+    HiUserGroup, HiOutlineBadgeCheck, HiVideoCamera, HiPhone, HiClipboardList, HiExternalLink
 } from 'react-icons/hi';
 import { ROUTES } from '../../constants/routes';
 import Button from '../../components/ui/Button';
@@ -169,6 +169,7 @@ export default function CourseDetail() {
     };
 
     const c = course || {};
+    const classroom = c.googleClassroom || {};
     const instructorName = c.instructorId?.name || 'Instructor';
     const lessons = c.lessons || [];
     const normalizedLessons = useMemo(() => {
@@ -301,16 +302,27 @@ export default function CourseDetail() {
                                     <div className="space-y-3 pt-2">
                                         {enrolled ? (
                                             normalizedLessons.length > 0 ? (
-                                                <Link 
-                                                    to={`/learner/courses/${courseId}/lessons/${
-                                                        // Find first lesson NOT yet completed, or fallback to last
-                                                        firstActionableLesson?.order ||
-                                                        normalizedLessons[normalizedLessons.length - 1]?.order ||
-                                                        1
-                                                    }`}
-                                                >
-                                                    <Button fullWidth size="lg">Continue Learning</Button>
-                                                </Link>
+                                                <div className="space-y-3">
+                                                    <Link 
+                                                        to={`/learner/courses/${courseId}/lessons/${
+                                                            firstActionableLesson?.order ||
+                                                            normalizedLessons[normalizedLessons.length - 1]?.order ||
+                                                            1
+                                                        }`}
+                                                    >
+                                                        <Button fullWidth size="lg">Continue Learning</Button>
+                                                    </Link>
+                                                    {classroom.alternateLink && (
+                                                        <Button
+                                                            fullWidth
+                                                            variant="outline"
+                                                            className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                                            onClick={() => window.open(classroom.alternateLink, '_blank', 'noopener,noreferrer')}
+                                                        >
+                                                            <HiExternalLink className="mr-2" /> Join Google Classroom
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             ) : (
                                                 <Button fullWidth size="lg" disabled>No Lessons Yet</Button>
                                             )
@@ -341,6 +353,14 @@ export default function CourseDetail() {
                                         )}
                                     </div>
                                     <div className="space-y-4 pt-4 border-t border-surface-border">
+                                        {enrolled && classroom.id && (
+                                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                                                <p className="text-sm font-bold text-emerald-900">Google Classroom is live</p>
+                                                <p className="mt-1 text-xs text-emerald-800">
+                                                    Join code: <span className="font-black">{classroom.enrollmentCode || 'Check the classroom link'}</span>
+                                                </p>
+                                            </div>
+                                        )}
                                         <p className="text-sm font-bold text-text-primary">This course includes:</p>
                                         <ul className="space-y-2">
                                             {[

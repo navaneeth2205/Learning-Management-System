@@ -21,7 +21,9 @@ import clsx from 'clsx';
 import { 
     fetchInstructorDashboard, 
     fetchInstructorStats, 
-    fetchPendingSubmissions 
+    fetchPendingSubmissions,
+    fetchInstructorCourses,
+    createGoogleClassroomForCourse,
 } from '../../services/instructorApi';
 
 // Simple CountUp Component
@@ -56,6 +58,7 @@ export default function InstructorDashboard() {
     ];
 
     const [stats, setStats] = useState(statsItems);
+    const [courses, setCourses] = useState([]);
     const [submissions, setSubmissions] = useState([
         { name: 'Alex Rivera', course: 'UI/UX Masterclass', task: 'Design System V1', time: '2h ago' },
         { name: 'Mila Kunis', course: 'React Fundamentals', task: 'Custom Hooks Ex', time: '5h ago' },
@@ -92,7 +95,43 @@ export default function InstructorDashboard() {
             .catch(err => {
                 console.error("Pending Submissions Fetch Error:", err);
             });
+
+        fetchInstructorCourses()
+            .then((data) => {
+                setCourses(Array.isArray(data) ? data.slice(0, 4) : []);
+            })
+            .catch((err) => {
+                console.error('Instructor courses fetch error:', err);
+            });
     }, []);
+
+    const handleCreateClassroom = async (course) => {
+        const toastId = toast.loading(`Creating Google Classroom for ${course.title}...`);
+
+        try {
+            const data = await createGoogleClassroomForCourse(course._id || course.id);
+            setCourses((prev) =>
+                prev.map((item) =>
+                    String(item._id || item.id) === String(course._id || course.id)
+                        ? { ...item, googleClassroom: data?.classroom || item.googleClassroom }
+                        : item
+                )
+            );
+
+            toast.success(
+                data?.alreadyExists
+                    ? `Google Classroom already exists for ${course.title}.`
+                    : `Google Classroom created and ${data?.notifiedStudents || 0} students alerted.`,
+                { id: toastId }
+            );
+
+            if (data?.classroom?.alternateLink) {
+                window.open(data.classroom.alternateLink, '_blank', 'noopener,noreferrer');
+            }
+        } catch (error) {
+            toast.error(error.message || 'Failed to create Google Classroom', { id: toastId });
+        }
+    };
 
     const performanceData = [
         { name: 'Course A', completion: 85, dropoff: 15 },
@@ -272,6 +311,35 @@ export default function InstructorDashboard() {
                                     </button>
                                 </div>
                             ))}
+                        </div>
+                    </section>
+
+                    <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-md">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xl font-black text-gray-800 tracking-tight">Google Classrooms</h3>
+                            <button onClick={() => navigate(ROUTES.INSTRUCTOR_COURSES)} className="text-[10px] font-black text-primary-500 uppercase tracking-widest hover:underline">Manage Courses</button>
+                        </div>
+                        <div className="space-y-3">
+                            {courses.length > 0 ? courses.map((course) => (
+                                <div key={course._id || course.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-100 p-4">
+                                    <div>
+                                        <p className="font-bold text-gray-800">{course.title}</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                                            {course.googleClassroom?.id ? `Live code: ${course.googleClassroom.enrollmentCode || 'Available in Classroom'}` : 'No classroom yet'}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        size="sm"
+                                        variant={course.googleClassroom?.id ? 'outline' : 'primary'}
+                                        className={course.googleClassroom?.id ? 'border-emerald-300 text-emerald-700' : ''}
+                                        onClick={() => handleCreateClassroom(course)}
+                                    >
+                                        {course.googleClassroom?.id ? 'Open Classroom' : 'Create Classroom'}
+                                    </Button>
+                                </div>
+                            )) : (
+                                <p className="text-sm text-gray-500">Create a course first to provision its Google Classroom.</p>
+                            )}
                         </div>
                     </section>
                 </div>

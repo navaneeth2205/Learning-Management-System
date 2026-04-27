@@ -18,6 +18,16 @@ const roleDashboards = {
     [ROLES.ADMIN]: ROUTES.ADMIN_DASHBOARD,
 };
 
+const isRoleAllowedPath = (role, path) => {
+    if (!path) return false;
+    const normalizedRole = String(role || '').toLowerCase();
+
+    if (normalizedRole === ROLES.LEARNER) return path.startsWith('/learner');
+    if (normalizedRole === ROLES.INSTRUCTOR) return path.startsWith('/instructor');
+    if (normalizedRole === ROLES.ADMIN) return path.startsWith('/admin');
+    return false;
+};
+
 const AUTH_STORAGE_KEY = 'lms_auth';
 
 export default function LoginPage() {
@@ -58,7 +68,7 @@ export default function LoginPage() {
 
     const navigateByRole = (role) => {
         const fromPath = location.state?.from?.pathname;
-        if (fromPath && fromPath !== ROUTES.LOGIN) {
+        if (fromPath && fromPath !== ROUTES.LOGIN && isRoleAllowedPath(role, fromPath)) {
             navigate(fromPath, { replace: true });
             return;
         }

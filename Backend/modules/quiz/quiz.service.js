@@ -5,6 +5,7 @@ import QuizAttempt from './quizAttempt.model.js';
 import Enrollment from '../enrollment/enrollment.model.js';
 import Lesson from '../lesson/lesson.model.js';
 import Progress from '../progress/progress.model.js';
+import { recalculateProgressForCourse } from '../progress/progress.service.js';
 
 import { ROLES, createAppError } from '../../utils/constants.js';
 
@@ -125,6 +126,25 @@ const normalizeMaxAttempts = (value) => {
 	return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_ATTEMPTS;
 };
 
+const normalizeQuizQuestions = (questions = []) => {
+	if (!Array.isArray(questions)) {
+		return [];
+	}
+
+	return questions
+		.map((question) => ({
+			type: question.type || 'multiple_choice',
+			question: String(question.question || '').trim(),
+			options: Array.isArray(question.options)
+				? question.options.map((option) => String(option || '').trim()).filter(Boolean)
+				: [],
+			correctAnswer: question.type === 'survey' ? '' : String(question.correctAnswer || '').trim(),
+			points: Number.isFinite(Number(question.points)) ? Number(question.points) : 1,
+			explanation: String(question.explanation || '').trim(),
+		}))
+		.filter((question) => question.question && (question.type === 'survey' || question.correctAnswer));
+};
+
 const decorateLearnerQuiz = (quiz, attemptMap, completedLessonsMap, lessonsByCourse) => {
 	const quizObject = typeof quiz.toObject === 'function' ? quiz.toObject() : { ...quiz };
 	const quizId = toIdString(quizObject._id);
@@ -200,16 +220,31 @@ const assertLearnerQuizAccess = async (quiz, userId) => {
 	return learnerQuiz;
 };
 
-export const createQuiz = async ({ courseId, title, questions, timeLimit, passingScore, lessonOrder, createdBy }) => {
+export const getEnrolledLearnerIdsByCourse = async (courseId) => {
+	const enrollments = await Enrollment.find({ courseId }).select('userId');
+	return enrollments.map((e) => String(e.userId));
+};
+
+export const createQuiz = async ({ courseId, title, questions, timeLimit, passingScore, lessonOrder, createdBy, creatorRole }) => {
 	const course = await Course.findById(courseId);
 	if (!course) {
 		throw createAppError('Course not found', 404);
 	}
 
+	// Validate instructor owns the course
+	if (creatorRole === ROLES.INSTRUCTOR && String(course.instructorId) !== String(createdBy)) {
+		throw createAppError('You can only add quizzes to your own courses', 403);
+	}
+
+	const normalizedQuestions = normalizeQuizQuestions(questions);
+	if (normalizedQuestions.length === 0) {
+		throw createAppError('Quiz must include at least one question', 400);
+	}
+
 	return Quiz.create({
 		courseId,
 		title,
-		questions,
+		questions: normalizedQuestions,
 		timeLimit,
 		passingScore,
 		lessonOrder: Number.isFinite(Number(lessonOrder)) ? Number(lessonOrder) : null,
@@ -231,47 +266,31 @@ export const submitQuizAnswers = async ({ quizId, userId, answers, timeTaken, re
 		throw createAppError('Answers must be an array', 400);
 	}
 
-	let score = 0;
-	const results = [];
-	quiz.questions.forEach((question, index) => {
-		const userAnswer = answers[index] || '';
-		const isCorrect = userAnswer === question.correctAnswer;
-		if (isCorrect) {
-			score += 1;
-		}
-		results.push({
-			question: question.question,
-			userAnswer,
-			correctAnswer: question.correctAnswer,
-			isCorrect,
-		});
-	});
-
-	const total = quiz.questions.length;
-	const percentage = total ? Number(((score / total) * 100).toFixed(2)) : 0;
-	const passed = percentage >= (quiz.passingScore || 70);
+	const gradableQuestions = quiz.questions.filter((question) => question.type !== 'survey');
+	const total = gradableQuestions.length;
 
 	const attempt = await QuizAttempt.create({
 		quizId,
 		userId,
 		answers,
-		score,
+		score: null,
 		total,
-		percentage,
-		passed,
+		percentage: null,
+		passed: null,
+		status: 'pending',
 		timeTaken: timeTaken || 0,
 	});
+
+	await recalculateProgressForCourse({ userId, courseId: quiz.courseId });
 
 	return {
 		attemptId: attempt._id,
 		quizId: quiz._id,
 		quizTitle: quiz.title,
-		score,
 		total,
-		percentage,
-		passed,
-		passingScore: quiz.passingScore,
-		results,
+		status: 'pending',
+		reviewRequired: true,
+		submittedAt: attempt.completedAt,
 	};
 };
 
@@ -349,6 +368,24 @@ export const getQuizzesForLearner = async (userId) => {
 	return decorateLearnerQuizzes(quizzes, userId);
 };
 
+export const getQuizzesForInstructor = async (instructorId) => {
+	const ownedCourses = await Course.find({ instructorId }).select('_id').lean();
+	const courseIds = ownedCourses.map((course) => course._id);
+
+	if (courseIds.length === 0) {
+		return [];
+	}
+
+	const quizIds = await findQuizIdsByCourseIds(courseIds);
+	if (quizIds.length === 0) {
+		return [];
+	}
+
+	return Quiz.find({ _id: { $in: quizIds } })
+		.populate('courseId', 'title category difficulty')
+		.sort({ lessonOrder: 1, createdAt: -1 });
+};
+
 export const getQuizAttemptResult = async (attemptId) => {
 	const attempt = await QuizAttempt.findById(attemptId)
 		.populate('quizId', 'title courseId passingScore questions');
@@ -366,4 +403,86 @@ export const getQuizAttemptsByUser = async (userId, quizId) => {
 		.populate('quizId', 'title passingScore');
 
 	return attempts;
+};
+
+export const getQuizAttemptsForInstructor = async ({ instructorId, status = 'all' }) => {
+	const ownedCourses = await Course.find({ instructorId }).select('_id').lean();
+	const courseIds = ownedCourses.map((course) => course._id);
+
+	if (courseIds.length === 0) {
+		return [];
+	}
+
+	const quizzes = await Quiz.find({ courseId: { $in: courseIds } }).select('_id').lean();
+	const quizIds = quizzes.map((quiz) => quiz._id);
+
+	if (quizIds.length === 0) {
+		return [];
+	}
+
+	const filter = { quizId: { $in: quizIds } };
+	if (status === 'pending') {
+		filter.reviewedAt = null;
+	}
+	if (status === 'graded') {
+		filter.reviewedAt = { $ne: null };
+	}
+
+	return QuizAttempt.find(filter)
+		.populate('userId', 'name email')
+		.populate('reviewedBy', 'name email')
+		.populate({
+			path: 'quizId',
+			select: 'title courseId passingScore timeLimit',
+			populate: {
+				path: 'courseId',
+				select: 'title',
+			},
+		})
+		.sort({ completedAt: -1 });
+};
+
+export const reviewQuizAttempt = async ({ attemptId, instructorId, percentage, feedback }) => {
+	const attempt = await QuizAttempt.findById(attemptId).populate({
+		path: 'quizId',
+		select: 'title courseId passingScore',
+		populate: {
+			path: 'courseId',
+			select: 'title instructorId',
+		},
+	});
+
+	if (!attempt) {
+		throw createAppError('Quiz attempt not found', 404);
+	}
+
+	if (String(attempt.quizId?.courseId?.instructorId) !== String(instructorId)) {
+		throw createAppError('You can review attempts only for your own courses', 403);
+	}
+
+	const parsedPercentage = Number(percentage);
+	if (!Number.isFinite(parsedPercentage) || parsedPercentage < 0 || parsedPercentage > 100) {
+		throw createAppError('Quiz grade must be a number between 0 and 100', 400);
+	}
+
+	attempt.percentage = Number(parsedPercentage.toFixed(2));
+	attempt.score = Number(((attempt.total * parsedPercentage) / 100).toFixed(2));
+	attempt.passed = attempt.percentage >= (attempt.quizId?.passingScore || 70);
+	attempt.status = 'reviewed';
+	attempt.feedback = feedback || '';
+	attempt.reviewedBy = instructorId;
+	attempt.reviewedAt = new Date();
+	await attempt.save();
+
+	return QuizAttempt.findById(attemptId)
+		.populate('userId', 'name email')
+		.populate('reviewedBy', 'name email')
+		.populate({
+			path: 'quizId',
+			select: 'title courseId passingScore timeLimit',
+			populate: {
+				path: 'courseId',
+				select: 'title',
+			},
+		});
 };

@@ -3,7 +3,7 @@ import { NavLink, useNavigate, Outlet } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import {
     GraduationCap, Home, BookOpen, FileText, BarChart2,
-    Bell, MessageSquare, User, Menu, Plus, Shield, Users
+    Bell, MessageSquare, User, Menu, Plus, Users
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { logout } from '../features/auth/authSlice';
@@ -11,6 +11,7 @@ import { ROUTES } from '../constants/routes';
 import Avatar from '../components/ui/Avatar';
 import NotificationCenter from '../components/ui/NotificationCenter';
 import clsx from 'clsx';
+import { useNotifications } from '../hooks/useNotifications';
 
 const sidebarSections = [
     {
@@ -23,8 +24,9 @@ const sidebarSections = [
         title: 'Course Management',
         items: [
             { label: 'My Courses', icon: BookOpen, to: ROUTES.INSTRUCTOR_COURSES },
+            { label: 'Assignments', icon: FileText, to: ROUTES.INSTRUCTOR_ASSIGNMENTS },
             { label: 'Submissions', icon: FileText, to: ROUTES.INSTRUCTOR_SUBMISSIONS },
-            { label: 'Assignments & Quizzes', icon: FileText, to: ROUTES.INSTRUCTOR_QUIZZES },
+            { label: 'Quizzes', icon: FileText, to: ROUTES.INSTRUCTOR_QUIZZES },
             { label: 'Grading', icon: FileText, to: ROUTES.INSTRUCTOR_GRADING },
         ]
     },
@@ -49,12 +51,7 @@ export default function InstructorLayout() {
     const [collapsed, setCollapsed] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
-    const [notifications, setNotifications] = useState([
-        { id: 1, type: 'course', title: 'Course Update Published!', message: 'Your updates to "Advanced React Patterns" are live.', time: '2 mins ago', unread: true, color: 'emerald', icon: BookOpen },
-        { id: 2, type: 'message', title: 'New Peer Inquiry', message: 'A student inquired about state management requirements.', time: '1 hour ago', unread: true, color: 'blue', icon: MessageSquare },
-        { id: 3, type: 'platform', title: 'Maintenance Update', message: 'Instructor portal might face minor slowdowns tonight.', time: '5 hours ago', unread: false, color: 'amber', icon: Shield },
-        { id: 4, type: 'enrollment', title: 'Mass Enrollment', message: '12 new students enrolled in "UI Design Fundamentals".', time: '1 day ago', unread: false, color: 'purple', icon: Users }
-    ]);
+    const { notifications, handleMarkRead, handleMarkAllRead } = useNotifications();
 
     const { user } = useSelector(s => s.auth);
     const dispatch = useDispatch();
@@ -75,12 +72,10 @@ export default function InstructorLayout() {
                 <div className="fixed inset-0 z-20 bg-slate-900/40 backdrop-blur-sm md:hidden" onClick={() => setSidebarOpen(false)} />
             )}
 
-            {/* Sidebar */}
             <aside className={clsx(
                 'fixed md:relative z-30 h-full bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0',
                 sidebarOpen ? (collapsed ? 'w-20' : 'w-64') : 'w-0 md:w-20'
             )}>
-                {/* Brand Logo */}
                 <div className={clsx('flex items-center gap-3 px-8 py-8 border-b border-slate-100 flex-shrink-0', collapsed && 'justify-center px-2')}>
                     <div className="w-10 h-10 bg-[#6d28d9] rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-100 relative z-10">
                         <GraduationCap className="w-6 h-6 text-white" />
@@ -92,7 +87,6 @@ export default function InstructorLayout() {
                     )}
                 </div>
 
-                {/* Quick Actions */}
                 {!collapsed && (
                     <div className="p-4 border-b border-slate-100">
                         <NavLink to={ROUTES.INSTRUCTOR_COURSE_CREATE}>
@@ -104,7 +98,6 @@ export default function InstructorLayout() {
                     </div>
                 )}
 
-                {/* Nav items */}
                 <nav className="flex-1 overflow-y-auto px-4 custom-scrollbar space-y-6 py-6 border-transparent bg-white w-full">
                     {sidebarSections.map((section, idx) => (
                         <div key={idx} className="space-y-1">
@@ -143,7 +136,6 @@ export default function InstructorLayout() {
                 </nav>
             </aside>
 
-            {/* Main Content Area */}
             <div className="flex-1 flex flex-col overflow-hidden min-w-0">
                 <header className="h-16 bg-white border-b border-slate-200 flex items-center gap-4 px-6 flex-shrink-0 z-10">
                     <button
@@ -200,7 +192,8 @@ export default function InstructorLayout() {
                 isOpen={notificationsOpen}
                 onClose={() => setNotificationsOpen(false)}
                 notifications={notifications}
-                setNotifications={setNotifications}
+                onMarkRead={handleMarkRead}
+                onMarkAllRead={handleMarkAllRead}
             />
         </div>
     );

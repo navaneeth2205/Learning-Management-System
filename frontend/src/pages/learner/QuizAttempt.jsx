@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { HiOutlineClock, HiMenu, HiChevronLeft, HiChevronRight, HiFlag, HiX, HiOutlineFlag } from 'react-icons/hi';
-import { fetchQuizById } from '../../services/learnerApi';
-import { startAttempt, setAnswer, toggleFlag, submitAttempt } from '../../features/quiz/quizSlice';
+import { fetchQuizById, submitQuiz } from '../../services/learnerApi';
+import { startAttempt, setAnswer, toggleFlag } from '../../features/quiz/quizSlice';
 import { useTimer } from '../../hooks/useTimer';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -16,15 +16,59 @@ export default function QuizAttempt() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
 
+    const normalizeQuestion = (question, index) => {
+        const typeMap = {
+            multiple_choice: 'mcq',
+            true_false: 'true_false',
+            descriptive: 'short_answer',
+            survey: Array.isArray(question.options) && question.options.length > 0 ? 'mcq' : 'short_answer',
+        };
+
+        const normalizedType = typeMap[question.type] || 'mcq';
+        const normalizedOptions = Array.isArray(question.options)
+            ? question.options.map((option, optionIndex) => ({
+                id: `${index}-opt-${optionIndex}`,
+                text: String(option || ''),
+            }))
+            : [];
+
+        return {
+            id: String(question._id || `q-${index}`),
+            text: question.question || '',
+            type: normalizedType,
+            options: normalizedType === 'mcq' ? normalizedOptions : [],
+            correctOption: null,
+            points: Number(question.points) || 1,
+            explanation: question.explanation || '',
+            difficulty: 'medium',
+            isSurvey: question.type === 'survey',
+        };
+    };
+
     const [quiz, setQuiz] = useState(null);
     const [quizLoading, setQuizLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
+    const [hasStarted, setHasStarted] = useState(false);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [submitModalOpen, setSubmitModalOpen] = useState(false);
+    const [timeUpPulse, setTimeUpPulse] = useState(false);
+    const [forceSubmitting, setForceSubmitting] = useState(false);
 
     useEffect(() => {
         setQuizLoading(true);
         fetchQuizById(id)
             .then(data => {
-                setQuiz(data);
+                const normalizedQuiz = {
+                    ...data,
+                    id: String(data?._id || id),
+                    timeLimit: Number(data?.timeLimit) > 0 ? Number(data.timeLimit) : 30,
+                    maxAttempts: Number(data?.maxAttempts) > 0 ? Number(data.maxAttempts) : 3,
+                    attemptsUsed: Number(data?.attemptsUsed) || 0,
+                    questions: Array.isArray(data?.questions) ? data.questions.map(normalizeQuestion) : [],
+                    course: data?.courseId?.title || 'Course',
+                };
+                setQuiz(normalizedQuiz);
                 setLoadError('');
             })
             .catch((error) => {
@@ -34,28 +78,69 @@ export default function QuizAttempt() {
             .finally(() => setQuizLoading(false));
     }, [id]);
 
+    const timeLimitMinutes = Number(quiz?.timeLimit) > 0 ? Number(quiz.timeLimit) : 30;
+
     const { currentAttempt } = useSelector(s => s.quiz);
+    const attemptRef = useRef(currentAttempt);
+    const quizRef = useRef(quiz);
+    const secondsRef = useRef(timeLimitMinutes * 60);
 
-    const [hasStarted, setHasStarted] = useState(false);
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [drawerOpen, setDrawerOpen] = useState(false);
-    const [submitModalOpen, setSubmitModalOpen] = useState(false);
-    const [timeUpPulse, setTimeUpPulse] = useState(false);
-    const [forceSubmitting, setForceSubmitting] = useState(false);
+    const mapAnswerForSubmission = useCallback((question, selected) => {
+        if (selected == null || selected === '') {
+            return '';
+        }
 
-    const handleAutoSubmit = useCallback(() => {
+        if (question.type === 'mcq') {
+            const matchedOption = (question.options || []).find((option) => option.id === selected);
+            return matchedOption?.text || '';
+        }
+
+        if (question.type === 'true_false') {
+            return selected === 'true' ? 'True' : selected === 'false' ? 'False' : String(selected);
+        }
+
+        return String(selected);
+    }, []);
+
+    const buildAnswerArray = useCallback((quizData, answersMap) => {
+        return (quizData?.questions || []).map((question) =>
+            mapAnswerForSubmission(question, answersMap?.[question.id])
+        );
+    }, [mapAnswerForSubmission]);
+
+    const handleAutoSubmit = useCallback(async () => {
         setForceSubmitting(true);
-        setTimeout(() => {
-            dispatch(submitAttempt({ score: 75, passed: true }));
+        try {
+            const latestQuiz = quizRef.current;
+            const answersMap = attemptRef.current?.answers || {};
+            const answerArray = buildAnswerArray(latestQuiz, answersMap);
+            const totalSeconds = (Number(latestQuiz?.timeLimit) > 0 ? Number(latestQuiz.timeLimit) : 30) * 60;
+            const timeTaken = Math.max(0, totalSeconds - secondsRef.current);
+            await submitQuiz(id, { answers: answerArray, timeTaken });
+        } finally {
             navigate(`/learner/quiz/${id}/results`);
-        }, 1500);
-    }, [dispatch, id, navigate]);
+        }
+    }, [buildAnswerArray, id, navigate]);
 
-    const { seconds, resume, isRunning } = useTimer(
-        id,
-        (quiz?.timeLimit || 30) * 60,
-        handleAutoSubmit
-    );
+    const { seconds, resume, isRunning, reset } = useTimer(id, timeLimitMinutes * 60, handleAutoSubmit);
+
+    useEffect(() => {
+        attemptRef.current = currentAttempt;
+    }, [currentAttempt]);
+
+    useEffect(() => {
+        quizRef.current = quiz;
+    }, [quiz]);
+
+    useEffect(() => {
+        secondsRef.current = seconds;
+    }, [seconds]);
+
+    useEffect(() => {
+        if (quiz && !hasStarted) {
+            reset();
+        }
+    }, [quiz, hasStarted, reset]);
 
     useEffect(() => {
         const handleBeforeUnload = (e) => {
@@ -88,9 +173,17 @@ export default function QuizAttempt() {
         resume();
     };
 
-    const handleManualSubmit = () => {
-        dispatch(submitAttempt({ score: 85, passed: true }));
-        navigate(`/learner/quiz/${id}/results`);
+    const handleManualSubmit = async () => {
+        setForceSubmitting(true);
+        try {
+            const answersMap = currentAttempt?.answers || {};
+            const answerArray = buildAnswerArray(quiz, answersMap);
+            const totalSeconds = timeLimitMinutes * 60;
+            const timeTaken = Math.max(0, totalSeconds - seconds);
+            await submitQuiz(id, { answers: answerArray, timeTaken });
+        } finally {
+            navigate(`/learner/quiz/${id}/results`);
+        }
     };
 
     if (forceSubmitting) {
@@ -118,7 +211,7 @@ export default function QuizAttempt() {
                     <div className="space-y-3 mb-8">
                         <div className="flex justify-between p-3 bg-slate-50 rounded-xl font-bold">
                             <span className="text-slate-500">Time Limit</span>
-                            <span className="text-slate-800">{quiz.timeLimit} Minutes</span>
+                            <span className="text-slate-800">{timeLimitMinutes} Minutes</span>
                         </div>
                         <div className="flex justify-between p-3 bg-slate-50 rounded-xl font-bold">
                             <span className="text-slate-500">Questions</span>

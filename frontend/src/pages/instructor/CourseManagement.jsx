@@ -16,7 +16,7 @@ import Badge from '../../components/ui/Badge';
 import SearchBar from '../../components/ui/SearchBar';
 import { Table, Thead, Tbody, Tr, Th, Td } from '../../components/ui/Table';
 import Pagination from '../../components/ui/Pagination';
-import { fetchInstructorCourses, deleteCourse } from '../../services/instructorApi';
+import { fetchInstructorCourses, deleteCourse, createGoogleClassroomForCourse } from '../../services/instructorApi';
 import { useEffect } from 'react';
 
 export default function CourseManagement() {
@@ -42,8 +42,9 @@ export default function CourseManagement() {
                         title: c.title,
                         category: c.category || 'Web Development',
                         status: c.status || 'draft',
-                        enrolled: c.enrollmentCount || 0,
-                        rating: c.rating || 0
+                        enrolled: c.enrollmentCount || c.enrolledCount || 0,
+                        rating: c.rating || 0,
+                        googleClassroom: c.googleClassroom || {}
                     })));
                 }
                 setLoading(false);
@@ -99,13 +100,32 @@ export default function CourseManagement() {
         toast.error('Course permanently deleted.');
     };
 
-    const handleCreateClassroom = (course) => {
+    const handleCreateClassroom = async (course) => {
         setOpenActionMenuId(null);
         const toastId = toast.loading(`Provisioning Google Classroom for ${course.title}...`);
-        setTimeout(() => {
-            toast.success(`Google Classroom generated for ${course.title}!`, { id: toastId });
-            window.open(`https://classroom.google.com/share?url=${encodeURIComponent(window.location.href)}&title=${encodeURIComponent(course.title)}`, '_blank', 'noopener,noreferrer');
-        }, 1500);
+        try {
+            const data = await createGoogleClassroomForCourse(course.id);
+            setInstructorCourses((prev) =>
+                prev.map((item) =>
+                    item.id === course.id
+                        ? { ...item, googleClassroom: data?.classroom || item.googleClassroom }
+                        : item
+                )
+            );
+
+            toast.success(
+                data?.alreadyExists
+                    ? `Google Classroom already exists for ${course.title}.`
+                    : `Google Classroom created and ${data?.notifiedStudents || 0} students alerted.`,
+                { id: toastId }
+            );
+
+            if (data?.classroom?.alternateLink) {
+                window.open(data.classroom.alternateLink, '_blank', 'noopener,noreferrer');
+            }
+        } catch (error) {
+            toast.error(error.message || 'Failed to create Google Classroom', { id: toastId });
+        }
     };
 
     return (
@@ -263,7 +283,7 @@ export default function CourseManagement() {
                                                         </button>
                                                         <div className="my-1 border-t border-surface-border"></div>
                                                         <button onClick={() => handleCreateClassroom(course)} className="w-full text-left px-4 py-2 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors flex items-center gap-2 font-bold">
-                                                            <HiLightningBolt className="w-4 h-4 text-emerald-500" /> Auto-Create Classroom
+                                                            <HiLightningBolt className="w-4 h-4 text-emerald-500" /> {course.googleClassroom?.id ? 'Open Classroom' : 'Create Classroom'}
                                                         </button>
                                                         <div className="my-1 border-t border-surface-border"></div>
                                                         <button onClick={() => handleDelete(course.id)} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2">

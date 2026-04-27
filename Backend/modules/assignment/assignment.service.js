@@ -3,12 +3,19 @@ import Assignment from './assignment.model.js';
 import Enrollment from '../enrollment/enrollment.model.js';
 import Submission from '../submission/submission.model.js';
 
-import { createAppError } from '../../utils/constants.js';
+import { createAppError, ROLES } from '../../utils/constants.js';
 
-export const createAssignment = async ({ courseId, title, description, deadline, points }) => {
+export const createAssignment = async ({ courseId, title, description, deadline, points, creatorId, creatorRole }) => {
 	const course = await Course.findById(courseId);
 	if (!course) {
 		throw createAppError('Course not found', 404);
+	}
+
+	if (
+		creatorRole === ROLES.INSTRUCTOR
+		&& String(course.instructorId) !== String(creatorId)
+	) {
+		throw createAppError('You can create assignments only for your own courses', 403);
 	}
 
 	return Assignment.create({
@@ -18,6 +25,11 @@ export const createAssignment = async ({ courseId, title, description, deadline,
 		deadline,
 		points,
 	});
+};
+
+export const getEnrolledLearnerIdsByCourse = async (courseId) => {
+	const enrollments = await Enrollment.find({ courseId }).select('userId').lean();
+	return enrollments.map((enrollment) => String(enrollment.userId)).filter(Boolean);
 };
 
 export const getAssignmentsByCourse = async (courseId) => Assignment.find({ courseId }).sort({ deadline: 1 });

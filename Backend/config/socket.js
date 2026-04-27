@@ -4,6 +4,32 @@ import { env } from '../config/env.js';
 
 // Map userId -> Set of socket ids
 const onlineUsers = new Map();
+let ioRef = null;
+
+export const emitToUser = (userId, eventName, payload = {}) => {
+	if (!ioRef || !userId || !eventName) return false;
+	const sockets = onlineUsers.get(String(userId));
+	if (!sockets || sockets.size === 0) return false;
+
+	sockets.forEach((socketId) => {
+		ioRef.to(socketId).emit(eventName, payload);
+	});
+
+	return true;
+};
+
+export const emitToUsers = (userIds = [], eventName, payload = {}) => {
+	if (!ioRef || !Array.isArray(userIds) || !eventName) return 0;
+
+	let deliveredTo = 0;
+	userIds.forEach((userId) => {
+		if (emitToUser(userId, eventName, payload)) {
+			deliveredTo += 1;
+		}
+	});
+
+	return deliveredTo;
+};
 
 export const initSocketServer = (httpServer) => {
 	const io = new Server(httpServer, {
@@ -17,6 +43,8 @@ export const initSocketServer = (httpServer) => {
 			credentials: true,
 		},
 	});
+
+	ioRef = io;
 
 	// Auth middleware — verify JWT before allowing connection
 	io.use((socket, next) => {
@@ -137,3 +165,4 @@ export const initSocketServer = (httpServer) => {
 
 	return io;
 };
+export const getIORef = () => ioRef;

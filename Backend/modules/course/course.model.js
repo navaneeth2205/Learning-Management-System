@@ -58,6 +58,49 @@ const courseSchema = new mongoose.Schema(
 			type: Number,
 			default: 0,
 		},
+		googleClassroom: {
+			id: {
+				type: String,
+				default: '',
+				trim: true,
+			},
+			name: {
+				type: String,
+				default: '',
+				trim: true,
+			},
+			section: {
+				type: String,
+				default: '',
+				trim: true,
+			},
+			descriptionHeading: {
+				type: String,
+				default: '',
+				trim: true,
+			},
+			description: {
+				type: String,
+				default: '',
+				trim: true,
+			},
+			enrollmentCode: {
+				type: String,
+				default: '',
+				trim: true,
+			},
+			alternateLink: {
+				type: String,
+				default: '',
+				trim: true,
+			},
+			state: {
+				type: String,
+				default: '',
+				trim: true,
+			},
+			createdAt: Date,
+		},
 		createdAt: {
 			type: Date,
 			default: Date.now,

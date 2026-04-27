@@ -5,15 +5,22 @@ import Certificate from '../certificate/certificate.model.js';
 import QuizAttempt from '../quiz/quizAttempt.model.js';
 import Submission from '../submission/submission.model.js';
 import User from '../user/user.model.js';
+import { recalculateProgressForCourse } from '../progress/progress.service.js';
 
 export const getLearnerDashboardStats = async (userId) => {
 	const enrollments = await Enrollment.find({ userId }).populate('courseId', 'title category thumbnail');
 	const progressRecords = await Progress.find({ userId });
+	await Promise.all(
+		progressRecords.map((progress) =>
+			recalculateProgressForCourse({ userId, courseId: progress.courseId, progressRecord: progress })
+		)
+	);
+	const refreshedProgressRecords = await Progress.find({ userId });
 	const certificates = await Certificate.find({ userId });
 	const quizAttempts = await QuizAttempt.find({ userId });
 
 	const enrolledCourses = enrollments.length;
-	const completedCourses = progressRecords.filter((p) => p.completionPercentage >= 100).length;
+	const completedCourses = refreshedProgressRecords.filter((p) => p.completionPercentage >= 100).length;
 	const certificateCount = certificates.length;
 
 	const avgScore =
@@ -31,7 +38,7 @@ export const getLearnerDashboardStats = async (userId) => {
 			_id: e._id,
 			courseId: e.courseId,
 			enrolledAt: e.enrolledAt,
-			progress: progressRecords.find((p) => p.courseId.toString() === e.courseId._id.toString())?.completionPercentage || 0,
+			progress: refreshedProgressRecords.find((p) => p.courseId.toString() === e.courseId._id.toString())?.completionPercentage || 0,
 		})),
 	};
 };

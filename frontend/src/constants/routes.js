@@ -24,12 +24,14 @@ export const ROUTES = {
     LEARNER_LEADERBOARD: '/learner/leaderboard',
     LEARNER_QUIZ_ATTEMPT: '/learner/quiz/:id/attempt',
     LEARNER_QUIZ_RESULTS: '/learner/quiz/:id/results',
+    CERTIFICATE_VERIFY: '/certificates/verify/:certNumber',
 
     // Instructor
     INSTRUCTOR_DASHBOARD: '/instructor/dashboard',
     INSTRUCTOR_COURSES: '/instructor/courses',
     INSTRUCTOR_COURSE_CREATE: '/instructor/courses/create',
     INSTRUCTOR_COURSE_EDIT: '/instructor/courses/:courseId/edit',
+    INSTRUCTOR_ASSIGNMENTS: '/instructor/assignments',
     INSTRUCTOR_SUBMISSIONS: '/instructor/submissions',
     INSTRUCTOR_GRADING: '/instructor/grading',
     INSTRUCTOR_ANALYTICS: '/instructor/analytics',

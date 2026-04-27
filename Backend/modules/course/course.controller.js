@@ -9,6 +9,7 @@ import {
 	updateCourse,
 	deleteCourse,
 	getAllCoursesUnfiltered,
+	createClassroomForInstructorCourse,
 } from './course.service.js';
 
 export const createCourseController = async (req, res, next) => {
@@ -94,6 +95,30 @@ export const deleteCourseController = async (req, res, next) => {
 		await deleteCourse(req.params.courseId);
 		return successResponse(res, {
 			message: 'Course deleted successfully',
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const createCourseClassroomController = async (req, res, next) => {
+	try {
+		const result = await createClassroomForInstructorCourse({
+			courseId: req.params.courseId,
+			instructorId: req.user._id,
+		});
+
+		return successResponse(res, {
+			message: result.alreadyExists
+				? 'Google Classroom already exists for this course'
+				: 'Google Classroom created and learners notified successfully',
+			data: {
+				courseId: result.course._id,
+				courseTitle: result.course.title,
+				classroom: result.classroom,
+				alreadyExists: result.alreadyExists,
+				notifiedStudents: result.notifiedStudents,
+			},
 		});
 	} catch (error) {
 		return next(error);

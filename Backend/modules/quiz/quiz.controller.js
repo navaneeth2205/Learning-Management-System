@@ -1,13 +1,57 @@
 import { successResponse } from '../../utils/responseHandler.js';
+import { getIORef } from '../../config/socket.js';
+import { createNotificationsForUsers } from '../notification/notification.service.js';
+import { ROLES } from '../../utils/constants.js';
 
-import { createQuiz, getQuizzesByCourse, getQuizByLessonOrder, getQuizById, submitQuizAnswers, getQuizzesForLearner, getQuizAttemptResult, getQuizAttemptsByUser } from './quiz.service.js';
+import { createQuiz, getQuizzesByCourse, getQuizByLessonOrder, getQuizById, submitQuizAnswers, getQuizzesForLearner, getQuizzesForInstructor, getQuizAttemptResult, getQuizAttemptsByUser, getEnrolledLearnerIdsByCourse, getQuizAttemptsForInstructor, reviewQuizAttempt } from './quiz.service.js';
 
 export const createQuizController = async (req, res, next) => {
 	try {
-		const quiz = await createQuiz({ ...req.body, createdBy: req.user._id });
+		const quiz = await createQuiz({ ...req.body, createdBy: req.user._id, creatorRole: req.user.role });
+		
+		// Emit real-time notification to enrolled learners
+		const io = getIORef();
+		if (io && quiz.courseId) {
+			const enrolledLearnerIds = await getEnrolledLearnerIdsByCourse(quiz.courseId);
+			if (enrolledLearnerIds && enrolledLearnerIds.length > 0) {
+				await createNotificationsForUsers(enrolledLearnerIds, {
+					title: 'New quiz posted',
+					message: `${quiz.title} is now available.`,
+					type: 'quiz',
+					link: '/learner/quizzes',
+					data: {
+						quizId: quiz._id,
+						courseId: quiz.courseId,
+						title: quiz.title,
+						timeLimit: quiz.timeLimit,
+						questionCount: quiz.questions?.length || 0,
+					},
+				});
+
+				io.to(`user:${req.user._id}`).emit('quiz:created', {
+					quizId: quiz._id,
+					courseId: quiz.courseId,
+					title: quiz.title,
+					timeLimit: quiz.timeLimit,
+					questionCount: quiz.questions?.length || 0,
+					createdAt: quiz.createdAt,
+				});
+				enrolledLearnerIds.forEach((learnerId) => {
+					io.to(`user:${learnerId}`).emit('quiz:posted', {
+						quizId: quiz._id,
+						courseId: quiz.courseId,
+						title: quiz.title,
+						timeLimit: quiz.timeLimit,
+						questionCount: quiz.questions?.length || 0,
+						createdAt: quiz.createdAt,
+					});
+				});
+			}
+		}
+		
 		return successResponse(res, {
 			statusCode: 201,
-			message: 'Quiz created successfully',
+			message: 'Quiz created successfully. Learners are notified instantly.',
 			data: quiz,
 		});
 	} catch (error) {
@@ -24,6 +68,22 @@ export const submitQuizController = async (req, res, next) => {
 			timeTaken: req.body.timeTaken,
 			requester: req.user,
 		});
+
+		// Emit real-time notification to instructor
+		const io = getIORef();
+		if (io && result) {
+			io.to(`user:${req.user._id}`).emit('quiz:submitted', {
+				attemptId: result.attemptId,
+				quizId: result.quizId,
+				quizTitle: result.quizTitle,
+				score: result.score,
+				total: result.total,
+				percentage: result.percentage,
+				passed: result.passed,
+				passingScore: result.passingScore,
+				submittedAt: new Date().toISOString(),
+			});
+		}
 
 		return successResponse(res, {
 			message: 'Quiz submitted successfully',
@@ -73,7 +133,10 @@ export const getQuizController = async (req, res, next) => {
 
 export const myQuizzesController = async (req, res, next) => {
 	try {
-		const quizzes = await getQuizzesForLearner(req.user._id);
+		const quizzes = req.user.role === ROLES.INSTRUCTOR
+			? await getQuizzesForInstructor(req.user._id)
+			: await getQuizzesForLearner(req.user._id);
+
 		return successResponse(res, {
 			message: 'Quizzes fetched successfully',
 			data: quizzes,
@@ -101,6 +164,40 @@ export const myQuizAttemptsController = async (req, res, next) => {
 		return successResponse(res, {
 			message: 'Quiz attempts fetched successfully',
 			data: attempts,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const instructorQuizAttemptsController = async (req, res, next) => {
+	try {
+		const attempts = await getQuizAttemptsForInstructor({
+			instructorId: req.user._id,
+			status: req.query.status || 'all',
+		});
+
+		return successResponse(res, {
+			message: 'Instructor quiz attempts fetched successfully',
+			data: attempts,
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const reviewQuizAttemptController = async (req, res, next) => {
+	try {
+		const attempt = await reviewQuizAttempt({
+			attemptId: req.params.attemptId,
+			instructorId: req.user._id,
+			percentage: req.body.grade ?? req.body.percentage,
+			feedback: req.body.feedback,
+		});
+
+		return successResponse(res, {
+			message: 'Quiz attempt reviewed successfully',
+			data: attempt,
 		});
 	} catch (error) {
 		return next(error);
