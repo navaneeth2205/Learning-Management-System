@@ -6,9 +6,7 @@ import { api } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
-const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
-
-export default function CallModal({ channelName, isOpen, onClose, isVideo = true }) {
+export default function CallModal({ channelName, isOpen, onClose, isVideo = true, calleeName = null, calleeId = null }) {
     const [localAudioTrack, setLocalAudioTrack] = useState(null);
     const [localVideoTrack, setLocalVideoTrack] = useState(null);
     const [remoteUsers, setRemoteUsers] = useState([]);
@@ -21,6 +19,15 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
     const remoteVideoRefs = useRef({});
     // Keep refs to tracks so we can synchronously clean them up on unmount
     const tracksRef = useRef({ audio: null, video: null });
+    const clientRef = useRef(null);
+    const isJoiningRef = useRef(false);
+    const joinedChannelRef = useRef(null);
+    const effectRunIdRef = useRef(0);
+    const callStartTimeRef = useRef(null); // tracks when call connected
+
+    if (!clientRef.current) {
+        clientRef.current = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+    }
 
     // Use a callback ref for the local video
     const localVideoRef = useRef(null);
@@ -43,10 +50,44 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
         if (!isOpen) return;
 
         let isMounted = true;
+        const runId = ++effectRunIdRef.current;
+        const client = clientRef.current;
+
+        const cleanupTracks = () => {
+            if (tracksRef.current.audio) {
+                tracksRef.current.audio.stop();
+                tracksRef.current.audio.close();
+                tracksRef.current.audio = null;
+            }
+            if (tracksRef.current.video) {
+                tracksRef.current.video.stop();
+                tracksRef.current.video.close();
+                tracksRef.current.video = null;
+            }
+        };
+
+        const leaveClient = async () => {
+            if (client.connectionState !== 'DISCONNECTED') {
+                try {
+                    await client.leave();
+                } catch (leaveError) {
+                    console.error('Agora leave error:', leaveError);
+                }
+            }
+            joinedChannelRef.current = null;
+            isJoiningRef.current = false;
+        };
 
         const init = async () => {
+            if (isJoiningRef.current || client.connectionState !== 'DISCONNECTED') {
+                return;
+            }
+
+            isJoiningRef.current = true;
             setIsConnecting(true);
             setConnectionError(null);
+
+            client.removeAllListeners();
 
             client.on('user-published', async (user, mediaType) => {
                 await client.subscribe(user, mediaType);
@@ -68,11 +109,24 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
             try {
                 // Step 1: Request permissions and create local tracks FIRST
                 const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                if (!isMounted || effectRunIdRef.current !== runId) {
+                    audioTrack.stop();
+                    audioTrack.close();
+                    isJoiningRef.current = false;
+                    return;
+                }
                 tracksRef.current.audio = audioTrack;
                 if (isMounted) setLocalAudioTrack(audioTrack);
                 
                 if (isVideo) {
                     const videoTrack = await AgoraRTC.createCameraVideoTrack();
+                    if (!isMounted || effectRunIdRef.current !== runId) {
+                        videoTrack.stop();
+                        videoTrack.close();
+                        cleanupTracks();
+                        isJoiningRef.current = false;
+                        return;
+                    }
                     tracksRef.current.video = videoTrack;
                     if (isMounted) {
                         setLocalVideoTrack(videoTrack);
@@ -84,10 +138,12 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                 }
             } catch (mediaErr) {
                 console.error('Media permission error:', mediaErr);
+                cleanupTracks();
                 if (isMounted) {
                     setConnectionError('Camera/Microphone permission denied.');
                     setIsConnecting(false);
                 }
+                isJoiningRef.current = false;
                 return;
             }
 
@@ -97,7 +153,11 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                 let appId = AGORA_APP_ID;
 
                 try {
-                    const response = await api.post('/agora/token', { channelName });
+                    const response = await api.post('/agora/token', {
+                        channelName,
+                        calleeName: calleeName || null,
+                        calleeId: calleeId || null,
+                    });
                     const data = response.data?.data;
                     if (data?.token) token = data.token;
                     if (data?.appId) appId = data.appId;
@@ -107,25 +167,36 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                 }
 
                 // Step 3: Join the channel
+                if (!isMounted || effectRunIdRef.current !== runId) {
+                    cleanupTracks();
+                    isJoiningRef.current = false;
+                    return;
+                }
                 await client.join(appId, channelName, token, null);
+                joinedChannelRef.current = channelName;
 
                 // Step 4: Publish tracks
-                if (isMounted) {
+                if (isMounted && effectRunIdRef.current === runId) {
                     if (isVideo && tracksRef.current.video) {
                         await client.publish([tracksRef.current.audio, tracksRef.current.video]);
                     } else if (tracksRef.current.audio) {
                         await client.publish([tracksRef.current.audio]);
                     }
+                    callStartTimeRef.current = Date.now(); // record call start time
                     setIsConnecting(false);
                     toast.success(isVideo ? 'Video call connected!' : 'Audio call connected!');
                 }
+                isJoiningRef.current = false;
             } catch (error) {
                 console.error('Agora join error:', error);
+                cleanupTracks();
+                await leaveClient();
                 if (isMounted) {
                     setIsConnecting(false);
                     setConnectionError(error.message || 'Failed to connect to the call');
                     toast.error('Connection failed: ' + error.message);
                 }
+                isJoiningRef.current = false;
             }
         };
 
@@ -133,21 +204,12 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
 
         return () => {
             isMounted = false;
-            // Synchronous cleanup to prevent track leaks in React Strict Mode
-            if (tracksRef.current.audio) {
-                tracksRef.current.audio.stop();
-                tracksRef.current.audio.close();
-                tracksRef.current.audio = null;
-            }
-            if (tracksRef.current.video) {
-                tracksRef.current.video.stop();
-                tracksRef.current.video.close();
-                tracksRef.current.video = null;
-            }
-            if (client.connectionState === 'CONNECTED') {
-                client.leave().catch(console.error);
-            }
+            cleanupTracks();
+            setLocalAudioTrack(null);
+            setLocalVideoTrack(null);
+            setRemoteUsers([]);
             client.removeAllListeners();
+            leaveClient();
         };
     }, [isOpen, channelName, isVideo]);
 
@@ -160,6 +222,7 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
     }, [remoteUsers]);
 
     const handleEndCall = async () => {
+        const client = clientRef.current;
         if (tracksRef.current.audio) {
             tracksRef.current.audio.stop();
             tracksRef.current.audio.close();
@@ -173,9 +236,29 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
         setLocalAudioTrack(null);
         setLocalVideoTrack(null);
         setRemoteUsers([]);
-        if (client.connectionState === 'CONNECTED') {
+        isJoiningRef.current = false;
+        joinedChannelRef.current = null;
+        if (client && client.connectionState !== 'DISCONNECTED') {
             await client.leave();
         }
+
+        // ── Report call duration to audit log ──
+        try {
+            const durationSeconds = callStartTimeRef.current
+                ? Math.floor((Date.now() - callStartTimeRef.current) / 1000)
+                : 0;
+            callStartTimeRef.current = null;
+            await api.post('/audit-logs/call-end', {
+                channelName,
+                calleeName: calleeName || null,
+                calleeId: calleeId || null,
+                durationSeconds,
+                callType: isVideo ? 'video' : 'audio',
+            });
+        } catch {
+            // Non-critical — swallow silently
+        }
+
         onClose();
     };
 

@@ -117,6 +117,10 @@ export const fetchCommunicationsByCourse = (courseId) => api.get(`/communication
 // ── Users ──
 export const fetchUsers = () => api.get('/users').then(unwrap);
 export const fetchUserById = (userId) => api.get(`/users/${userId}`).then(unwrap);
+export const fetchAdminUsers = (params = {}) => api.get('/users', { params }).then(unwrap);
+export const updateAdminUserRole = (userId, role) => api.patch(`/users/${userId}/role`, { role }).then(unwrap);
+export const fetchAdminCourses = () => api.get('/courses/admin/all').then(unwrap);
+export const updateAdminCourse = (courseId, payload) => api.put(`/courses/${courseId}`, payload).then(unwrap);
 
 // ── Dashboard Stats (for ProgressDashboard) ──
 export const fetchDashboardStats = () => api.get('/dashboard/stats').then(unwrap);
@@ -127,3 +131,8 @@ export const sendMessageAPI = (payload) => api.post('/messages', payload).then(u
 
 // ── Announcements (create alias) ──
 export const createAnnouncementAPI = (payload) => api.post('/announcements', payload).then(unwrap);
+export const fetchIssueReports = (params = {}) => api.get('/reports', { params }).then(unwrap);
+export const createIssueReport = (payload) => api.post('/reports', payload).then(unwrap);
+export const fetchIssueReportById = (reportId) => api.get(`/reports/${reportId}`).then(unwrap);
+export const updateIssueReportStatus = (reportId, payload) =>
+    api.patch(`/reports/${reportId}/status`, payload).then(unwrap);

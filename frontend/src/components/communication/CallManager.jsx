@@ -53,6 +53,7 @@ function useRingSound() {
 export default function CallManager() {
     const { socket } = useSocket();
     const { startRing, stopRing } = useRingSound();
+    const acceptingRef = useRef(false);
 
     // Incoming call state
     const [incomingCall, setIncomingCall] = useState(null);
@@ -110,7 +111,8 @@ export default function CallManager() {
     }, [socket]);
 
     const handleAcceptCall = () => {
-        if (!incomingCall || !socket) return;
+        if (!incomingCall || !socket || acceptingRef.current) return;
+        acceptingRef.current = true;
         stopRing();
         socket.emit('call:accept', {
             callerId: incomingCall.callerId,
@@ -122,10 +124,14 @@ export default function CallManager() {
             otherUserId: incomingCall.callerId,
         });
         setIncomingCall(null);
+        window.setTimeout(() => {
+            acceptingRef.current = false;
+        }, 300);
     };
 
     const handleRejectCall = () => {
         if (!incomingCall || !socket) return;
+        acceptingRef.current = false;
         stopRing();
         socket.emit('call:reject', {
             callerId: incomingCall.callerId,
@@ -141,6 +147,7 @@ export default function CallManager() {
                 channelName: activeCall.channelName,
             });
         }
+        acceptingRef.current = false;
         setActiveCall(null);
     };
 

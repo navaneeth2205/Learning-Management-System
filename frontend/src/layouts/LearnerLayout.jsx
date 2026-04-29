@@ -37,6 +37,7 @@ const sidebarSections = [
         items: [
             { label: 'Messages', icon: MessageSquare, to: ROUTES.LEARNER_MESSAGES },
             { label: 'Announcements', icon: Megaphone, to: ROUTES.LEARNER_ANNOUNCEMENTS },
+            { label: 'Report Issue', icon: FileText, to: ROUTES.LEARNER_REPORTS },
             { label: 'Community', icon: Users, to: '/learner/community' },
         ]
     },

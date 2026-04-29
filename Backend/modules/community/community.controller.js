@@ -8,6 +8,7 @@ import {
 	toggleLike,
 	deleteDiscussion,
 } from './community.service.js';
+import { logEvent } from '../auditLog/auditLog.service.js';
 
 export const createDiscussionController = async (req, res, next) => {
 	try {
@@ -19,6 +20,16 @@ export const createDiscussionController = async (req, res, next) => {
 			category: req.body.category,
 			tags: req.body.tags,
 		});
+
+		await logEvent({
+			type: 'content',
+			event: `Community discussion created: "${req.body.title}"`,
+			user: req.user.name,
+			userId: req.user._id,
+			ip: req.ip || 'unknown',
+			severity: 'low',
+		});
+
 		return successResponse(res, {
 			statusCode: 201,
 			message: 'Discussion created successfully',
@@ -61,6 +72,16 @@ export const addReplyController = async (req, res, next) => {
 			userId: req.user._id,
 			content: req.body.content,
 		});
+
+		await logEvent({
+			type: 'content',
+			event: `Reply added to community discussion`,
+			user: req.user.name,
+			userId: req.user._id,
+			ip: req.ip || 'unknown',
+			severity: 'low',
+		});
+
 		return successResponse(res, {
 			statusCode: 201,
 			message: 'Reply added successfully',
@@ -89,6 +110,16 @@ export const toggleLikeController = async (req, res, next) => {
 export const deleteDiscussionController = async (req, res, next) => {
 	try {
 		await deleteDiscussion(req.params.discussionId, req.user._id);
+
+		await logEvent({
+			type: 'content',
+			event: `Community discussion deleted`,
+			user: req.user.name,
+			userId: req.user._id,
+			ip: req.ip || 'unknown',
+			severity: 'medium',
+		});
+
 		return successResponse(res, {
 			message: 'Discussion deleted successfully',
 		});

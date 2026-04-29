@@ -4,6 +4,7 @@ import Course from '../course/course.model.js';
 import { recalculateProgressForCourse } from '../progress/progress.service.js';
 
 import { createAppError } from '../../utils/constants.js';
+import { logEvent } from '../auditLog/auditLog.service.js';
 
 export const createSubmission = async ({ assignmentId, userId, fileUrl }) => {
 	const assignment = await Assignment.findById(assignmentId);
@@ -23,6 +24,14 @@ export const createSubmission = async ({ assignmentId, userId, fileUrl }) => {
 	});
 
 	await recalculateProgressForCourse({ userId, courseId: assignment.courseId });
+
+	await logEvent({
+		type: 'mod',
+		event: `Assignment submitted: "${assignment.title}"`,
+		userId,
+		severity: 'low',
+		meta: { assignmentId, submissionId: submission._id },
+	});
 
 	return submission;
 };
@@ -49,6 +58,14 @@ export const assignGrade = async ({ submissionId, grade, feedback, gradedBy }) =
 	if (!submission) {
 		throw createAppError('Submission not found', 404);
 	}
+
+	await logEvent({
+		type: 'mod',
+		event: `Assignment graded: "${submission.assignmentId?.title}" — ${grade}/${submission.assignmentId?.points || 100}`,
+		userId: gradedBy,
+		severity: 'low',
+		meta: { submissionId, grade },
+	});
 
 	return submission;
 };

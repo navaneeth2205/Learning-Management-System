@@ -53,6 +53,6 @@ export function Tr({ children, onClick, className = '' }) {
     );
 }
 
-export function Td({ children, className = '' }) {
-    return <td className={clsx('px-4 py-3 text-text-primary', className)}>{children}</td>;
+export function Td({ children, className = '', ...props }) {
+    return <td className={clsx('px-4 py-3 text-text-primary', className)} {...props}>{children}</td>;
 }

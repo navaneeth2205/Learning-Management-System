@@ -4,6 +4,7 @@ import Progress from '../progress/progress.model.js';
 import { createNotification } from '../notification/notification.service.js';
 
 import { createAppError } from '../../utils/constants.js';
+import { logEvent } from '../auditLog/auditLog.service.js';
 
 export const enrollInCourse = async ({ userId, courseId }) => {
 	const course = await Course.findById(courseId);
@@ -47,6 +48,13 @@ export const enrollInCourse = async ({ userId, courseId }) => {
 		});
 	}
 
+	await logEvent({
+		type: 'mod',
+		event: `User enrolled in course "${course.title}"`,
+		userId,
+		severity: 'low',
+	});
+
 	return enrollment;
 };
 
@@ -70,5 +78,14 @@ export const unenrollFromCourse = async ({ userId, courseId }) => {
 		throw createAppError('Enrollment not found', 404);
 	}
 	await Course.findByIdAndUpdate(courseId, { $inc: { enrolledCount: -1 } });
+
+	const course = await Course.findById(courseId).select('title');
+	await logEvent({
+		type: 'mod',
+		event: `User unenrolled from course "${course?.title || courseId}"`,
+		userId,
+		severity: 'low',
+	});
+
 	return enrollment;
 };

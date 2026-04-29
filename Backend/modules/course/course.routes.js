@@ -1,7 +1,7 @@
 import express from 'express';
 
 import { authenticate } from '../../middleware/auth.middleware.js';
-import { isInstructorOrAdmin } from '../../middleware/role.middleware.js';
+import { isAdmin, isInstructorOrAdmin } from '../../middleware/role.middleware.js';
 import {
 	createCourseController,
 	getAllCoursesController,
@@ -19,6 +19,7 @@ const router = express.Router();
 
 router.post('/', authenticate, isInstructorOrAdmin, uploadThumbnail.single('thumbnail'), createCourseController);
 router.get('/', getAllCoursesController);
+router.get('/admin/all', authenticate, isAdmin, getAllCoursesController);
 router.get('/instructor/me', authenticate, isInstructorOrAdmin, getInstructorCoursesController);
 router.post('/:courseId/classroom', authenticate, isInstructorOrAdmin, createCourseClassroomController);
 router.get('/:courseId', getSingleCourseController);

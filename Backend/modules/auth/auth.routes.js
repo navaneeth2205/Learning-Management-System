@@ -1,7 +1,8 @@
 import express from 'express';
 
-import { confirmPasswordReset, googleLogin, login, register, requestPasswordReset, resendOtp, verifyOtp } from './auth.controller.js';
+import { confirmPasswordReset, googleLogin, login, register, registerAdminController, requestPasswordReset, resendOtp, verifyOtp } from './auth.controller.js';
 import {
+	adminRegistrationValidation,
 	forgotPasswordValidation,
 	googleLoginValidation,
 	loginValidation,
@@ -19,8 +20,7 @@ router.get('/', (req, res) => {
 		success: true,
 		message: 'Auth API is active',
 		endpoints: {
-			register: 'POST /api/auth/register',
-			verifyOtp: 'POST /api/auth/verify-otp',
+			register: 'POST /api/auth/register',		registerAdmin: 'POST /api/auth/register-admin (requires adminToken)',			verifyOtp: 'POST /api/auth/verify-otp',
 			resendOtp: 'POST /api/auth/resend-otp',
 			login: 'POST /api/auth/login',
 			google: 'POST /api/auth/google',
@@ -45,6 +45,7 @@ router.get('/login', (req, res) => {
 });
 
 router.post('/register', registerValidation, validateRequest, register);
+router.post('/register-admin', adminRegistrationValidation, validateRequest, registerAdminController);
 router.post('/verify-otp', verifyOtpValidation, validateRequest, verifyOtp);
 router.post('/resend-otp', resendOtpValidation, validateRequest, resendOtp);
 router.post('/login', loginValidation, validateRequest, login);

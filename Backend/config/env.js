@@ -31,6 +31,7 @@ export const env = {
 	defaultFromEmail: process.env.DEFAULT_FROM_EMAIL || process.env.EMAIL_HOST_USER || '',
 	emailAllowSelfSigned: String(process.env.EMAIL_ALLOW_SELF_SIGNED || 'true').toLowerCase() === 'true',
 	resetPasswordExpiresMinutes: Number(process.env.RESET_PASSWORD_EXPIRES_MINUTES) || 15,
+	adminRegistrationToken: process.env.ADMIN_REGISTRATION_TOKEN || '',
 	agoraAppId: process.env.AGORA_APP_ID || '',
 	agoraAppCertificate: process.env.AGORA_APP_CERTIFICATE || '',
 	agoraTokenExpireSeconds: Number(process.env.AGORA_TOKEN_EXPIRE_SECONDS) || 3600,

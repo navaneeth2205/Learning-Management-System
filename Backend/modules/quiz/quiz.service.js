@@ -8,6 +8,7 @@ import Progress from '../progress/progress.model.js';
 import { recalculateProgressForCourse } from '../progress/progress.service.js';
 
 import { ROLES, createAppError } from '../../utils/constants.js';
+import { logEvent } from '../auditLog/auditLog.service.js';
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 
@@ -283,6 +284,14 @@ export const submitQuizAnswers = async ({ quizId, userId, answers, timeTaken, re
 
 	await recalculateProgressForCourse({ userId, courseId: quiz.courseId });
 
+	await logEvent({
+		type: 'mod',
+		event: `Quiz submitted: "${quiz.title}"`,
+		userId,
+		severity: 'low',
+		meta: { quizId, totalQuestions: total },
+	});
+
 	return {
 		attemptId: attempt._id,
 		quizId: quiz._id,
@@ -473,6 +482,14 @@ export const reviewQuizAttempt = async ({ attemptId, instructorId, percentage, f
 	attempt.reviewedBy = instructorId;
 	attempt.reviewedAt = new Date();
 	await attempt.save();
+
+	await logEvent({
+		type: 'mod',
+		event: `Quiz attempt reviewed: "${attempt.quizId?.title}" — ${attempt.percentage}% (${attempt.passed ? 'Passed' : 'Failed'})`,
+		userId: instructorId,
+		severity: attempt.passed ? 'low' : 'medium',
+		meta: { attemptId, percentage: attempt.percentage, passed: attempt.passed },
+	});
 
 	return QuizAttempt.findById(attemptId)
 		.populate('userId', 'name email')

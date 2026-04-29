@@ -19,6 +19,7 @@ export const ROUTES = {
     LEARNER_PROGRESS: '/learner/progress',
     LEARNER_CERTIFICATES: '/learner/certificates',
     LEARNER_ANNOUNCEMENTS: '/learner/announcements',
+    LEARNER_REPORTS: '/learner/reports',
     LEARNER_PROFILE: '/learner/profile',
     LEARNER_MESSAGES: '/learner/messages',
     LEARNER_LEADERBOARD: '/learner/leaderboard',
@@ -36,6 +37,7 @@ export const ROUTES = {
     INSTRUCTOR_GRADING: '/instructor/grading',
     INSTRUCTOR_ANALYTICS: '/instructor/analytics',
     INSTRUCTOR_ANNOUNCEMENTS: '/instructor/announcements',
+    INSTRUCTOR_REPORTS: '/instructor/reports',
     INSTRUCTOR_PROFILE: '/instructor/profile',
     INSTRUCTOR_MESSAGES: '/instructor/messages',
     INSTRUCTOR_ACCESS_REQUESTS: '/instructor/access-requests',
@@ -54,6 +56,8 @@ export const ROUTES = {
     ADMIN_SETTINGS: '/admin/settings',
     ADMIN_ANNOUNCEMENTS: '/admin/announcements',
     ADMIN_LOGS: '/admin/logs',
+    ADMIN_MESSAGES: '/admin/messages',
+    ADMIN_PROFILE: '/admin/profile',
 
     // Shared
     NOTIFICATIONS: '/notifications',

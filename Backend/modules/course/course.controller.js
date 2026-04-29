@@ -18,7 +18,7 @@ export const createCourseController = async (req, res, next) => {
 		if (req.file) {
 			courseData.thumbnail = `/uploads/thumbnails/${req.file.filename}`;
 		}
-		const course = await createCourse(courseData);
+		const course = await createCourse(courseData, req.user);
 		return successResponse(res, {
 			statusCode: 201,
 			message: 'Course created successfully',
@@ -32,7 +32,11 @@ export const createCourseController = async (req, res, next) => {
 export const getAllCoursesController = async (req, res, next) => {
 	try {
 		const { category, difficulty, search, instructorId } = req.query;
-		const courses = await getCourses({ category, difficulty, search, instructorId });
+		const isAdminScope =
+			(req.query.scope === 'all' || req.path.includes('/admin/all')) && req.user?.role === 'admin';
+		const courses = isAdminScope
+			? await getAllCoursesUnfiltered()
+			: await getCourses({ category, difficulty, search, instructorId });
 		return successResponse(res, {
 			message: 'Courses fetched successfully',
 			data: courses,
@@ -80,7 +84,7 @@ export const getCourseDetailController = async (req, res, next) => {
 
 export const updateCourseController = async (req, res, next) => {
 	try {
-		const course = await updateCourse(req.params.courseId, req.body);
+		const course = await updateCourse(req.params.courseId, req.body, req.user);
 		return successResponse(res, {
 			message: 'Course updated successfully',
 			data: course,

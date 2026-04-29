@@ -1,110 +1,179 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import {
-    HiShieldCheck, HiEye, HiCheck, HiX,
-    HiExclamation, HiFilter, HiSearch, HiCollection
-} from 'react-icons/hi';
+import { HiCheck, HiCollection, HiEye, HiRefresh, HiX } from 'react-icons/hi';
+
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Avatar from '../../components/ui/Avatar';
-import { Table, Th, Tr, Td, Thead, Tbody } from '../../components/ui/Table';
+import { Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui/Table';
+import { fetchAdminCourses, updateAdminCourse } from '../../services/learnerApi';
+
+const riskFromCourse = (course) => {
+    if (course.status === 'draft') return 'medium';
+    if ((course.rating || 0) < 2 && (course.reviewCount || 0) > 0) return 'high';
+    return 'low';
+};
+
+const formatDate = (value) =>
+    value
+        ? new Date(value).toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+        })
+        : 'N/A';
 
 export default function CourseModeration() {
-    const [courses, setCourses] = useState([
-        {
-            id: 1,
-            title: 'Hacking the Mainframe with COBOL',
-            instructor: 'Elliot Alderson',
-            category: 'Security',
-            submittedAt: '1h ago',
-            risk: 'low'
-        },
-        {
-            id: 2,
-            title: 'Dark Web Trading 101',
-            instructor: 'Unknown User',
-            category: 'Finance',
-            submittedAt: '3h ago',
-            risk: 'high'
-        },
-        {
-            id: 3,
-            title: 'Introduction to Quantum Computing',
-            instructor: 'Dr. Jane Smith',
-            category: 'Science',
-            submittedAt: 'Yesterday',
-            risk: 'low'
+    const [courses, setCourses] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [savingId, setSavingId] = useState('');
+
+    const loadCourses = async () => {
+        try {
+            setLoading(true);
+            const data = await fetchAdminCourses();
+            setCourses(Array.isArray(data) ? data : []);
+            setError('');
+        } catch (err) {
+            setError(err.message || 'Failed to load courses');
+        } finally {
+            setLoading(false);
         }
-    ]);
-
-    const handlePreview = (course) => toast(`Previewing: "${course.title}"`, { icon: '👁️' });
-
-    const handleApprove = (id) => {
-        const course = courses.find(c => c.id === id);
-        setCourses(prev => prev.filter(c => c.id !== id));
-        toast.success(`"${course.title}" approved and published!`);
     };
 
-    const handleReject = (id) => {
-        const course = courses.find(c => c.id === id);
-        setCourses(prev => prev.filter(c => c.id !== id));
-        toast.error(`"${course.title}" rejected and returned to instructor.`);
+    useEffect(() => {
+        loadCourses();
+    }, []);
+
+    const moderationRows = useMemo(() => courses.map((course) => ({
+        ...course,
+        risk: riskFromCourse(course),
+    })), [courses]);
+
+    const handleStatusUpdate = async (course, status) => {
+        try {
+            setSavingId(course._id);
+            const updatedCourse = await updateAdminCourse(course._id, { status });
+            setCourses((current) => current.map((entry) => (entry._id === course._id ? updatedCourse : entry)));
+            toast.success(`${course.title} marked as ${status}.`);
+        } catch (err) {
+            toast.error(err.message || 'Course update failed');
+        } finally {
+            setSavingId('');
+        }
     };
+
+    const pendingCount = moderationRows.filter((course) => course.status === 'draft').length;
 
     return (
-        <div className="p-6 space-y-8 max-w-7xl mx-auto">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-8">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                 <div>
-                    <h1 className="text-3xl font-bold text-text-primary text-slate-900">Course Moderation</h1>
-                    <p className="text-text-secondary">Review pending course submissions and flag potential policy violations.</p>
+                    <h1 className="text-3xl font-black text-slate-900">Course Moderation</h1>
+                    <p className="text-slate-500 mt-2">
+                        Review instructor-created courses, approve drafts when they are ready, and archive content that should no longer be learner-facing.
+                    </p>
                 </div>
-                <div className="flex gap-2">
-                    <Badge color="amber" size="lg" className="px-4 py-2 font-bold">12 Pending Review</Badge>
+                <div className="flex flex-wrap gap-3">
+                    <Badge color="amber" className="px-4 py-2 font-bold">
+                        {pendingCount} draft courses
+                    </Badge>
+                    <Button variant="outline" icon={<HiRefresh />} onClick={loadCourses}>
+                        Refresh
+                    </Button>
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-surface-border shadow-card overflow-hidden">
+            {error && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+                    {error}
+                </div>
+            )}
+
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
                 <Table>
                     <Thead>
-                        <Th>Course Submission</Th>
+                        <Th>Course</Th>
                         <Th>Instructor</Th>
-                        <Th>Category</Th>
-                        <Th>Submitted</Th>
-                        <Th>Risk Level</Th>
-                        <th className="px-6 py-4 text-right">Moderator Actions</th>
+                        <Th>Status</Th>
+                        <Th>Created</Th>
+                        <Th>Risk</Th>
+                        <Th align="right">Actions</Th>
                     </Thead>
                     <Tbody>
-                        {courses.map(course => (
-                            <Tr key={course.id}>
+                        {loading ? (
+                            <Tr>
+                                <Td colSpan={6} className="py-10 text-slate-500">Loading courses...</Td>
+                            </Tr>
+                        ) : moderationRows.length === 0 ? (
+                            <Tr>
+                                <Td colSpan={6} className="py-10 text-slate-500">No courses found.</Td>
+                            </Tr>
+                        ) : moderationRows.map((course) => (
+                            <Tr key={course._id}>
                                 <Td>
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                                            <HiCollection className="w-6 h-6 text-slate-300" />
+                                        <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center">
+                                            <HiCollection className="w-5 h-5" />
                                         </div>
-                                        <div>
-                                            <p className="font-bold text-text-primary text-sm">{course.title}</p>
-                                            <p className="text-[10px] text-text-muted font-bold uppercase">ID: #{course.id}</p>
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-slate-900 truncate">{course.title}</p>
+                                            <p className="text-xs text-slate-500 truncate">
+                                                {course.category || 'General'} • {course.enrolledCount || 0} learners
+                                            </p>
                                         </div>
                                     </div>
                                 </Td>
                                 <Td>
                                     <div className="flex items-center gap-2">
-                                        <Avatar name={course.instructor} size="xs" />
-                                        <span className="text-sm font-medium text-text-secondary">{course.instructor}</span>
+                                        <Avatar name={course.instructorId?.name || 'Instructor'} size="xs" />
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-800">{course.instructorId?.name || 'Unknown instructor'}</p>
+                                            <p className="text-xs text-slate-500">{course.instructorId?.email || 'No email available'}</p>
+                                        </div>
                                     </div>
                                 </Td>
-                                <Td><Badge color="blue">{course.category}</Badge></Td>
-                                <Td><span className="text-sm text-text-muted">{course.submittedAt}</span></Td>
                                 <Td>
-                                    <Badge color={course.risk === 'high' ? 'red' : 'green'} variant="soft">
-                                        {course.risk.toUpperCase()}
+                                    <Badge color={course.status === 'published' ? 'emerald' : course.status === 'archived' ? 'rose' : 'amber'}>
+                                        {course.status}
+                                    </Badge>
+                                </Td>
+                                <Td className="text-sm text-slate-500">{formatDate(course.createdAt)}</Td>
+                                <Td>
+                                    <Badge color={course.risk === 'high' ? 'rose' : course.risk === 'medium' ? 'amber' : 'emerald'}>
+                                        {course.risk}
                                     </Badge>
                                 </Td>
                                 <Td className="text-right">
-                                    <div className="flex items-center justify-end gap-2">
-                                        <Button size="sm" variant="outline" icon={<HiEye />} onClick={() => handlePreview(course)}>Preview</Button>
-                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white border-none" icon={<HiCheck />} onClick={() => handleApprove(course.id)}>Approve</Button>
-                                        <button onClick={() => handleReject(course.id)} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"><HiX /></button>
+                                    <div className="flex justify-end gap-2">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            icon={<HiEye />}
+                                            onClick={() => toast.success(`Instructor: ${course.instructorId?.name || 'Unknown'}`)}
+                                        >
+                                            Inspect
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            className="bg-emerald-600 hover:bg-emerald-700 text-white border-none"
+                                            icon={<HiCheck />}
+                                            disabled={savingId === course._id || course.status === 'published'}
+                                            onClick={() => handleStatusUpdate(course, 'published')}
+                                        >
+                                            Approve
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="text-rose-600 border-rose-200 hover:bg-rose-50"
+                                            icon={<HiX />}
+                                            disabled={savingId === course._id || course.status === 'archived'}
+                                            onClick={() => handleStatusUpdate(course, 'archived')}
+                                        >
+                                            Archive
+                                        </Button>
                                     </div>
                                 </Td>
                             </Tr>
@@ -113,17 +182,11 @@ export default function CourseModeration() {
                 </Table>
             </div>
 
-            {/* Moderation Policies Callout */}
-            <div className="bg-rose-50 rounded-2xl p-6 border border-rose-100 flex items-start gap-4">
-                <div className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center flex-shrink-0">
-                    <HiExclamation className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                    <h3 className="font-bold text-rose-900">Security Warning</h3>
-                    <p className="text-xs text-rose-700 leading-relaxed max-w-2xl">
-                        Entries flagged as <b>High Risk</b> may contain unauthorized external links or copyright-infringing material. Please perform a manual deep-link audit before approving.
-                    </p>
-                </div>
+            <div className="rounded-3xl border border-violet-100 bg-violet-50 p-6">
+                <h2 className="text-lg font-black text-slate-900">How admin now interacts with instructors and learners</h2>
+                <p className="text-sm text-slate-600 mt-2">
+                    Instructors are surfaced directly through their course records here, while learners are reflected through enrolled counts and can be managed from User Management and Messages without leaving the existing admin flow.
+                </p>
             </div>
         </div>
     );

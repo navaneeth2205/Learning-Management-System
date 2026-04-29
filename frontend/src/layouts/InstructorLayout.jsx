@@ -36,6 +36,7 @@ const sidebarSections = [
             { label: 'Messages', icon: MessageSquare, to: ROUTES.INSTRUCTOR_MESSAGES },
             { label: 'Access Requests', icon: Users, to: ROUTES.INSTRUCTOR_ACCESS_REQUESTS },
             { label: 'Announcements', icon: Bell, to: ROUTES.INSTRUCTOR_ANNOUNCEMENTS },
+            { label: 'Report Issue', icon: FileText, to: ROUTES.INSTRUCTOR_REPORTS },
         ]
     },
     {

@@ -35,7 +35,7 @@ export default function CreateCourse() {
 
     const handleSubmit = async () => {
         setIsSubmitting(true);
-        const toastId = toast.loading('Publishing your course...');
+        const toastId = toast.loading('Submitting your course for admin approval...');
         try {
             const payload = new FormData();
             payload.append('title', formData.title);
@@ -48,10 +48,10 @@ export default function CreateCourse() {
             if (formData.thumbnail) payload.append('thumbnail', formData.thumbnail);
 
             await createCourse(payload);
-            toast.success('Course published successfully!', { id: toastId });
+            toast.success('Course submitted successfully. It will be visible to learners after admin approval.', { id: toastId });
             navigate(ROUTES.INSTRUCTOR_COURSES);
         } catch (err) {
-            toast.error(err.message || 'Failed to publish course', { id: toastId });
+            toast.error(err.message || 'Failed to submit course', { id: toastId });
         } finally {
             setIsSubmitting(false);
         }
@@ -181,13 +181,13 @@ export default function CreateCourse() {
                                 <HiCheck className="w-10 h-10" />
                             </div>
                             <h3 className="text-xl font-bold text-text-primary">Ready to Launch!</h3>
-                            <p className="text-text-secondary max-w-sm">Review your details and publish your course to the EduVerse catalog.</p>
+                            <p className="text-text-secondary max-w-sm">Review your details and submit your course for admin approval before it reaches learners.</p>
                         </div>
 
                         <div className="space-y-4 bg-surface-muted/30 p-6 rounded-2xl border border-surface-border">
                             <div className="flex justify-between items-center text-sm">
                                 <span className="text-text-secondary">Visibility</span>
-                                <Badge color="green">Public</Badge>
+                                <Badge color="orange">Pending Admin Approval</Badge>
                             </div>
                             <div className="flex justify-between items-center text-sm pt-2 border-t border-surface-border">
                                 <span className="text-text-secondary italic">Estimated students reached</span>
@@ -218,7 +218,7 @@ export default function CreateCourse() {
                                 icon={<HiCheck />}
                                 disabled={isSubmitting}
                             >
-                                {isSubmitting ? 'Publishing...' : 'Publish Course'}
+                                {isSubmitting ? 'Submitting...' : 'Submit For Review'}
                             </Button>
                         )}
                     </div>

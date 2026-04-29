@@ -245,9 +245,12 @@ export default function CourseManagement() {
                                 </Td>
                                 <Td><Badge color="blue">{course.category}</Badge></Td>
                                 <Td>
-                                    <Badge color={course.status === 'published' ? 'green' : 'orange'}>
+                                    <Badge color={course.status === 'published' ? 'green' : course.status === 'archived' ? 'rose' : 'orange'}>
                                         {course.status}
                                     </Badge>
+                                    {course.status === 'draft' && (
+                                        <p className="text-[10px] text-slate-500 font-semibold mt-1">Waiting for admin approval</p>
+                                    )}
                                 </Td>
                                 <Td>
                                     <div className="flex items-center justify-end gap-1.5 font-medium text-text-primary mt-1">

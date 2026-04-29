@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
     HiSearch, HiFilter, HiPlus, HiChat,
     HiDotsVertical, HiPaperClip, HiPaperAirplane,
@@ -24,16 +25,26 @@ const mono = { fontFamily: "'DM Mono', monospace" };
    ═══════════════════════════════════════════════════════════════ */
 export default function MessageInbox() {
     const { user } = useSelector(s => s.auth);
+    const location = useLocation();
     const { socket, onlineUsers } = useSocket();
+    const recognitionRef = useRef(null);
+    const currentUserId = String(user?._id || user?.id || '');
     const [selectedId, setSelectedId] = useState(null);
     const [inputText, setInputText] = useState('');
     const [isStartingNew, setIsStartingNew] = useState(false);
     const [chats, setChats] = useState([]);
     const [messagesMap, setMessagesMap] = useState({});
     const [showOptions, setShowOptions] = useState(false);
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [callConfig, setCallConfig] = useState({ isOpen: false, channel: '', isVideo: true });
     const [accessStatus, setAccessStatus] = useState('none');
     const [requestingAccess, setRequestingAccess] = useState(false);
+    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+    const [isListening, setIsListening] = useState(false);
+    const [messageSearch, setMessageSearch] = useState('');
+    const emojiPickerRef = useRef(null);
+    const emojiButtonRef = useRef(null);
+    const commonEmojis = ['😀', '😂', '😊', '😍', '👍', '👏', '🙏', '🎉', '🔥', '💯', '📚', '✅'];
 
     // Listen for call rejection/unavailability to close the caller's modal
     useEffect(() => {
@@ -54,6 +65,21 @@ export default function MessageInbox() {
             socket.off('call:ended', handleEnd);
         };
     }, [socket]);
+
+    useEffect(() => {
+        if (!socket || !currentUserId) return;
+
+        const handleIncomingMessage = ({ message }) => {
+            if (!message) return;
+            loadMessages({ keepSelection: true });
+        };
+
+        socket.on('message:new', handleIncomingMessage);
+
+        return () => {
+            socket.off('message:new', handleIncomingMessage);
+        };
+    }, [currentUserId, socket]);
     const scrollRef = useRef(null);
     const optionsRef = useRef(null);
 
@@ -70,7 +96,6 @@ export default function MessageInbox() {
     };
 
     const normalizeBackendMessages = (items) => {
-        const currentUserId = user?._id || user?.id;
         const conversations = new Map();
         const history = new Map();
 
@@ -95,14 +120,17 @@ export default function MessageInbox() {
                 lastMsg: '',
                 time: '',
                 unread: 0,
+                updatedAt: '',
             };
 
-            const time = msg.createdAt
-                ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            const createdAt = msg.createdAt ? new Date(msg.createdAt) : null;
+            const time = createdAt
+                ? createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 : existing.time;
 
             existing.lastMsg = msg.subject ? `${msg.subject}: ${msg.content}` : (msg.content || existing.lastMsg);
             existing.time = time || existing.time;
+            existing.updatedAt = createdAt?.toISOString?.() || existing.updatedAt;
             if (!isOutgoing && !msg.read) existing.unread += 1;
 
             conversations.set(chatId, existing);
@@ -118,36 +146,95 @@ export default function MessageInbox() {
         });
 
         return {
-            chats: Array.from(conversations.values()),
+            chats: Array.from(conversations.values()).sort(
+                (a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)
+            ),
             messagesMap: Object.fromEntries(history.entries()),
         };
     };
 
-    // Fetch live messages (inbox + sent)
-    useEffect(() => {
-        Promise.all([fetchInbox(), fetchSentMessages()])
-            .then(([inbox, sent]) => {
-                const inboxItems = Array.isArray(inbox) ? inbox : [];
-                const sentItems = Array.isArray(sent) ? sent : [];
-                const merged = [...inboxItems, ...sentItems]
-                    .filter(Boolean)
-                    .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+    const loadMessages = async ({ keepSelection = false } = {}) => {
+        try {
+            setIsLoadingMessages(true);
+            const [inbox, sent] = await Promise.all([fetchInbox(), fetchSentMessages()]);
+            const inboxItems = Array.isArray(inbox) ? inbox : [];
+            const sentItems = Array.isArray(sent) ? sent : [];
+            const merged = [...inboxItems, ...sentItems]
+                .filter(Boolean)
+                .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 
-                const normalized = normalizeBackendMessages(merged);
-                
-                // Use API data exclusively
-                setChats(normalized.chats);
-                setMessagesMap(normalized.messagesMap);
-                
-                const firstChatId = normalized.chats[0]?.id;
-                if (firstChatId && String(selectedId) === '1') {
-                    setSelectedId(firstChatId);
+            const normalized = normalizeBackendMessages(merged);
+            const preselectedUser = location.state?.selectedUser;
+            const preselectedChatId = preselectedUser?.id ? String(preselectedUser.id) : '';
+
+            if (preselectedChatId && !normalized.chats.some((chat) => String(chat.id) === preselectedChatId)) {
+                normalized.chats = [
+                    {
+                        id: preselectedChatId,
+                        receiverId: preselectedChatId,
+                        name: preselectedUser.name || 'User',
+                        role: preselectedUser.role || 'User',
+                        status: 'offline',
+                        lastMsg: '',
+                        time: '',
+                        unread: 0,
+                    },
+                    ...normalized.chats,
+                ];
+                normalized.messagesMap = {
+                    ...normalized.messagesMap,
+                    [preselectedChatId]: normalized.messagesMap[preselectedChatId] || [],
+                };
+            }
+
+            setChats(normalized.chats);
+            setMessagesMap(normalized.messagesMap);
+
+            const firstChatId = normalized.chats[0]?.id || null;
+            const availableIds = new Set(normalized.chats.map((chat) => String(chat.id)));
+
+            setSelectedId((currentSelectedId) => {
+                if (preselectedChatId && availableIds.has(preselectedChatId)) {
+                    return preselectedChatId;
                 }
-            })
-            .catch((err) => {
-                console.error('Failed to fetch live messages:', err);
+                if (keepSelection && currentSelectedId && availableIds.has(String(currentSelectedId))) {
+                    return currentSelectedId;
+                }
+                if (currentSelectedId && availableIds.has(String(currentSelectedId))) {
+                    return currentSelectedId;
+                }
+                return firstChatId;
             });
-    }, [user]);
+        } catch (err) {
+            console.error('Failed to fetch live messages:', err);
+        } finally {
+            setIsLoadingMessages(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!currentUserId) return;
+
+        loadMessages();
+
+        const refreshTimer = window.setInterval(() => {
+            loadMessages({ keepSelection: true });
+        }, 3000);
+
+        const handleFocusRefresh = () => {
+            if (document.visibilityState === 'hidden') return;
+            loadMessages({ keepSelection: true });
+        };
+
+        window.addEventListener('focus', handleFocusRefresh);
+        document.addEventListener('visibilitychange', handleFocusRefresh);
+
+        return () => {
+            window.clearInterval(refreshTimer);
+            window.removeEventListener('focus', handleFocusRefresh);
+            document.removeEventListener('visibilitychange', handleFocusRefresh);
+        };
+    }, [currentUserId, location.state]);
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -155,19 +242,44 @@ export default function MessageInbox() {
             if (optionsRef.current && !optionsRef.current.contains(event.target)) {
                 setShowOptions(false);
             }
+            if (
+                emojiPickerRef.current &&
+                !emojiPickerRef.current.contains(event.target) &&
+                emojiButtonRef.current &&
+                !emojiButtonRef.current.contains(event.target)
+            ) {
+                setShowEmojiPicker(false);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+        };
+    }, []);
+
     const activeChat = chats.find(c => String(c.id) === String(selectedId));
     const activeMessages = messagesMap[String(selectedId)] || messagesMap[selectedId] || [];
+    const currentUserRole = String(user?.role || '').toLowerCase();
     const activeChatRole = String(activeChat?.role || '').toLowerCase();
     const isInstructorChat = activeChatRole === 'instructor';
+    const requiresInstructorAccess = currentUserRole === 'learner' && isInstructorChat;
+
+    useEffect(() => {
+        const preselectedUser = location.state?.selectedUser;
+        if (!preselectedUser?.id) return;
+        setSelectedId(String(preselectedUser.id));
+        setIsStartingNew(false);
+    }, [location.state]);
 
     useEffect(() => {
         const instructorId = activeChat?.receiverId;
-        if (!instructorId || !isInstructorChat) {
+        if (!instructorId || !requiresInstructorAccess) {
             setAccessStatus('approved');
             return;
         }
@@ -175,7 +287,7 @@ export default function MessageInbox() {
         fetchMessageAccessStatus(instructorId)
             .then((data) => setAccessStatus(data?.status || 'none'))
             .catch(() => setAccessStatus('none'));
-    }, [activeChat?.receiverId, isInstructorChat]);
+    }, [activeChat?.receiverId, requiresInstructorAccess]);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -195,66 +307,30 @@ export default function MessageInbox() {
     const handleSend = () => {
         if (!inputText.trim()) return;
 
-        if (isInstructorChat && accessStatus !== 'approved') {
+        if (requiresInstructorAccess && accessStatus !== 'approved') {
             toast.error('Request access from the instructor first');
             return;
         }
 
         const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        if (activeChat?.receiverId && user?._id) {
+        if (activeChat?.receiverId && currentUserId) {
+            const trimmedInput = inputText.trim();
             sendMessageAPI({
                 receiverId: activeChat.receiverId,
-                subject: `Message from ${user?.name || 'Learner'}`,
-                content: inputText,
+                subject: `Message from ${user?.name || 'User'}`,
+                content: trimmedInput,
             })
-                .then((message) => {
-                    const outgoing = {
-                        id: message?._id || Date.now(),
-                        text: message?.content || inputText,
-                        type: 'sent',
-                        time: now,
-                    };
-
-                    setMessagesMap(prev => ({
-                        ...prev,
-                        [String(selectedId)]: [...(prev[String(selectedId)] || prev[selectedId] || []), outgoing]
-                    }));
-
-                    setChats(prev => prev.map(c =>
-                        String(c.id) === String(selectedId)
-                            ? { ...c, lastMsg: inputText, time: 'Just now' }
-                            : c
-                    ));
-
+                .then(() => {
                     setInputText('');
                     toast.success('Message sent');
+                    loadMessages({ keepSelection: true });
                 })
                 .catch((err) => toast.error(err?.message || 'Failed to send message'));
             return;
         }
 
-        const newMsg = {
-            id: Date.now(),
-            text: inputText,
-            type: 'sent',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-
-        // Update messages for current chat
-        setMessagesMap(prev => ({
-            ...prev,
-            [selectedId]: [...(prev[selectedId] || []), newMsg]
-        }));
-
-        // Update last message in chat list
-        setChats(prev => prev.map(c =>
-            String(c.id) === String(selectedId)
-                ? { ...c, lastMsg: inputText, time: 'Just now' }
-                : c
-        ));
-
-        setInputText('');
+        toast.error('Select a valid contact before sending a message');
     };
 
     const handleRequestAccess = async () => {
@@ -276,6 +352,77 @@ export default function MessageInbox() {
         setSelectedId(contact.id);
         setIsStartingNew(false);
     };
+
+    const handleEmojiInsert = (emoji) => {
+        setInputText((prev) => `${prev}${emoji}`);
+        setShowEmojiPicker(false);
+    };
+
+    const handleVoiceToggle = () => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            toast.error('Speech recognition is not supported in this browser');
+            return;
+        }
+
+        if (isListening && recognitionRef.current) {
+            recognitionRef.current.stop();
+            return;
+        }
+
+        if (recognitionRef.current) {
+            recognitionRef.current.onresult = null;
+            recognitionRef.current.onend = null;
+            recognitionRef.current.onerror = null;
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.continuous = false;
+        let finalTranscript = '';
+
+        recognition.onstart = () => {
+            setIsListening(true);
+            toast.success('Voice input started');
+        };
+
+        recognition.onresult = (event) => {
+            finalTranscript = event.results[event.results.length - 1]?.[0]?.transcript?.trim() || '';
+        };
+
+        recognition.onerror = () => {
+            setIsListening(false);
+            recognitionRef.current = null;
+            toast.error('Voice input failed');
+        };
+
+        recognition.onend = () => {
+            setIsListening(false);
+            recognitionRef.current = null;
+            if (finalTranscript) {
+                setInputText((prev) => {
+                    const separator = prev.trim() ? ' ' : '';
+                    return `${prev}${separator}${finalTranscript}`.trim();
+                });
+            }
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+    };
+
+    const filteredChats = chats.filter((chat) => {
+        if (!messageSearch.trim()) return true;
+        const searchValue = messageSearch.toLowerCase();
+        return (
+            String(chat.name || '').toLowerCase().includes(searchValue) ||
+            String(chat.role || '').toLowerCase().includes(searchValue)
+        );
+    });
 
     return (
         <div className="flex h-[calc(100vh-160px)] bg-white rounded-[40px] shadow-2xl shadow-indigo-100/50 border border-slate-100 overflow-hidden" style={sora}>
@@ -304,6 +451,8 @@ export default function MessageInbox() {
                     <div className="relative group">
                         <HiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors w-5 h-5" />
                         <input
+                            value={messageSearch}
+                            onChange={(e) => setMessageSearch(e.target.value)}
                             placeholder="Find a contact..."
                             className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-3.5 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all font-bold placeholder-slate-400"
                         />
@@ -315,7 +464,7 @@ export default function MessageInbox() {
                     {isStartingNew ? (
                         <div className="space-y-4 animate-in fade-in slide-in-from-left-2 duration-300">
                             <p className="px-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Select Contact</p>
-                            {chats.map(contact => (
+                            {filteredChats.map(contact => (
                                 <div
                                     key={contact.id}
                                     onClick={() => handleSelectContact(contact)}
@@ -330,7 +479,7 @@ export default function MessageInbox() {
                             ))}
                         </div>
                     ) : (
-                        chats.map((chat, idx) => (
+                        filteredChats.map((chat, idx) => (
                             <div
                                 key={`${chat.id}-${idx}`}
                                 onClick={() => setSelectedId(chat.id)}
@@ -396,7 +545,7 @@ export default function MessageInbox() {
                     <div className="flex items-center gap-3 relative" ref={optionsRef}>
                         <button
                             onClick={() => {
-                                if (isInstructorChat && accessStatus !== 'approved') {
+                                if (requiresInstructorAccess && accessStatus !== 'approved') {
                                     toast.error('Request access first');
                                     return;
                                 }
@@ -422,7 +571,7 @@ export default function MessageInbox() {
                         </button>
                         <button
                             onClick={() => {
-                                if (isInstructorChat && accessStatus !== 'approved') {
+                                if (requiresInstructorAccess && accessStatus !== 'approved') {
                                     toast.error('Request access first');
                                     return;
                                 }
@@ -458,13 +607,13 @@ export default function MessageInbox() {
                             <div className="absolute right-0 top-16 w-56 bg-white rounded-3xl border border-slate-100 shadow-2xl shadow-indigo-100/50 p-2 z-[100] animate-in fade-in zoom-in-95 duration-200">
                                 <button
                                     onClick={() => {
-                                        toast.success('Chat history cleared.');
-                                        setMessagesMap(prev => ({ ...prev, [selectedId]: [] }));
+                                        loadMessages({ keepSelection: true });
+                                        toast.success('Chat refreshed from server.');
                                         setShowOptions(false);
                                     }}
                                     className="w-full flex items-center gap-3 px-4 py-3 text-xs font-black text-slate-600 hover:bg-slate-50 rounded-2xl transition-colors uppercase tracking-widest"
                                 >
-                                    <HiX className="w-4 h-4 text-slate-400" /> Clear Chat
+                                    <HiX className="w-4 h-4 text-slate-400" /> Refresh Chat
                                 </button>
                                 <button
                                     onClick={() => {
@@ -499,7 +648,13 @@ export default function MessageInbox() {
                     ref={scrollRef}
                     className="flex-1 overflow-y-auto p-10 space-y-8 bg-slate-50/20 custom-scrollbar scroll-smooth"
                 >
-                    {activeMessages.map((msg, idx) => (
+                    {isLoadingMessages && activeMessages.length === 0 ? (
+                        <div className="text-sm font-bold text-slate-400">Loading messages...</div>
+                    ) : !activeChat ? (
+                        <div className="text-sm font-bold text-slate-400">Select a contact to open the conversation.</div>
+                    ) : activeMessages.length === 0 ? (
+                        <div className="text-sm font-bold text-slate-400">No messages yet. Send the first message to start this chat.</div>
+                    ) : activeMessages.map((msg, idx) => (
                         <div key={`${msg.id}-${idx}`} className={clsx("flex flex-col group animate-in slide-in-from-bottom-2 duration-300", msg.type === 'sent' ? "items-end" : "items-start")}>
                             <div className={clsx(
                                 "max-w-[75%] px-6 py-4 text-sm font-medium shadow-sm transition-all duration-300",
@@ -525,7 +680,7 @@ export default function MessageInbox() {
 
                 {/* Input Area */}
                 <footer className="p-8 border-t border-slate-50 bg-white">
-                    {isInstructorChat && accessStatus !== 'approved' ? (
+                    {requiresInstructorAccess && accessStatus !== 'approved' ? (
                         <div className="max-w-4xl mx-auto p-6 bg-amber-50 border border-amber-200 rounded-[28px] text-center space-y-3">
                             <div className="flex items-center justify-center gap-2 text-amber-700">
                                 <HiLockClosed className="w-5 h-5" />
@@ -565,8 +720,42 @@ export default function MessageInbox() {
                                 placeholder="Share an insight or ask a question..."
                             />
                             <div className="flex items-center gap-1 pr-1">
-                                <button className="p-3 text-slate-400 hover:text-indigo-600 transition-colors"><HiMicrophone className="w-6 h-6" /></button>
-                                <button className="p-3 text-slate-400 hover:text-indigo-600 transition-colors"><HiEmojiHappy className="w-6 h-6" /></button>
+                                <button
+                                    onClick={handleVoiceToggle}
+                                    className={clsx(
+                                        "p-3 transition-colors",
+                                        isListening ? "text-rose-500" : "text-slate-400 hover:text-indigo-600"
+                                    )}
+                                >
+                                    <HiMicrophone className="w-6 h-6" />
+                                </button>
+                                <div className="relative">
+                                    <button
+                                        ref={emojiButtonRef}
+                                        onClick={() => setShowEmojiPicker((prev) => !prev)}
+                                        className="p-3 text-slate-400 hover:text-indigo-600 transition-colors"
+                                    >
+                                        <HiEmojiHappy className="w-6 h-6" />
+                                    </button>
+                                    {showEmojiPicker && (
+                                        <div
+                                            ref={emojiPickerRef}
+                                            className="absolute bottom-14 right-0 w-56 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl"
+                                        >
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {commonEmojis.map((emoji) => (
+                                                    <button
+                                                        key={emoji}
+                                                        onClick={() => handleEmojiInsert(emoji)}
+                                                        className="rounded-xl p-2 text-xl hover:bg-slate-100 transition-colors"
+                                                    >
+                                                        {emoji}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                                 <button
                                     onClick={handleSend}
                                     className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center hover:bg-orange-500 shadow-xl shadow-indigo-100 hover:shadow-orange-100 transition-all hover:scale-105 active:scale-95"

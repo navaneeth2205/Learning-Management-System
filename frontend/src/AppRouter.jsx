@@ -99,6 +99,7 @@ export default function AppRouter() {
                 <Route path="community" element={<CommunityPage />} />
                 <Route path="community/discussion/:id" element={<DiscussionDetail />} />
                 <Route path="announcements" element={<AnnouncementsPage />} />
+                <Route path="reports" element={<SystemReports />} />
                 <Route path="messages" element={<MessageInbox />} />
                 <Route path="profile" element={<ProfilePage />} />
             </Route>
@@ -127,6 +128,7 @@ export default function AppRouter() {
                 <Route path="quiz/:id/analytics" element={<QuizAnalytics />} />
                 <Route path="access-requests" element={<AccessRequests />} />
                 <Route path="announcements" element={<AnnouncementsPage />} />
+                <Route path="reports" element={<SystemReports />} />
                 <Route path="messages" element={<MessageInbox />} />
                 <Route path="profile" element={<ProfilePage />} />
             </Route>

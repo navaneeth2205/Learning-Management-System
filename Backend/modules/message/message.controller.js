@@ -1,4 +1,5 @@
 import { successResponse } from '../../utils/responseHandler.js';
+import { emitToUser } from '../../config/socket.js';
 
 import { sendMessage, getInbox, getSentMessages, getMessageById, markAsRead, deleteMessage, getUnreadCount } from './message.service.js';
 
@@ -10,6 +11,11 @@ export const sendMessageController = async (req, res, next) => {
 			subject: req.body.subject,
 			content: req.body.content,
 		});
+
+		emitToUser(req.body.receiverId, 'message:new', {
+			message,
+		});
+
 		return successResponse(res, {
 			statusCode: 201,
 			message: 'Message sent successfully',

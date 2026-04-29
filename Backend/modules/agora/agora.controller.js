@@ -3,6 +3,8 @@ import AgoraToken from 'agora-access-token';
 import { successResponse } from '../../utils/responseHandler.js';
 import { createAppError } from '../../utils/constants.js';
 import { env } from '../../config/env.js';
+import { logEvent } from '../auditLog/auditLog.service.js';
+import User from '../user/user.model.js';
 
 const { RtcRole, RtcTokenBuilder } = AgoraToken;
 
@@ -39,6 +41,42 @@ export const generateAgoraTokenController = async (req, res, next) => {
 			role,
 			privilegeExpiredTs
 		);
+
+		// ── Audit log: call initiated ──
+		// Frontend can optionally pass calleeName, calleeId, durationSeconds
+		const callerName = req.user?.name || 'Unknown';
+		const calleeName = req.body.calleeName || null;
+		const calleeId = req.body.calleeId || null;
+		const durationSeconds = Number(req.body.durationSeconds) || null;
+
+		// Resolve callee name from DB if only calleeId is passed
+		let resolvedCalleeName = calleeName;
+		if (!resolvedCalleeName && calleeId) {
+			const calleeUser = await User.findById(calleeId).select('name');
+			resolvedCalleeName = calleeUser?.name || null;
+		}
+
+		const durationLabel = durationSeconds != null
+			? ` — Duration: ${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s`
+			: '';
+
+		const calleeLabel = resolvedCalleeName ? ` called "${resolvedCalleeName}"` : ` joined channel "${channelName}"`;
+
+		await logEvent({
+			type: 'system',
+			event: `Video call: "${callerName}"${calleeLabel}${durationLabel}`,
+			user: callerName,
+			userId: req.user?._id || null,
+			ip: req.ip || 'unknown',
+			severity: 'low',
+			meta: {
+				channelName,
+				callerName,
+				calleeName: resolvedCalleeName,
+				calleeId,
+				durationSeconds,
+			},
+		});
 
 		return successResponse(res, {
 			message: 'Agora token generated successfully',

@@ -1,99 +1,93 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import {
-    HiSpeakerphone, HiClock,
-    HiChevronRight, HiCollection,
-    HiX, HiInformationCircle, HiPlus, HiChevronDown
+    HiChevronDown,
+    HiChevronRight,
+    HiClock,
+    HiCollection,
+    HiInformationCircle,
+    HiPlus,
+    HiSpeakerphone,
+    HiX
 } from 'react-icons/hi';
 import { AnimatePresence, motion } from 'framer-motion';
 import toast from 'react-hot-toast';
+import clsx from 'clsx';
+
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
-import clsx from 'clsx';
-import { useRef, useEffect } from 'react';
-import { fetchAnnouncements, createAnnouncementAPI } from '../../services/learnerApi';
+import { createAnnouncementAPI, fetchAnnouncements } from '../../services/learnerApi';
 
-/* ─── Font settings ────────────────────────────────────────── */
 const sora = { fontFamily: "'Sora', sans-serif" };
 const mono = { fontFamily: "'DM Mono', monospace" };
 
-/* ─── Mock Data ────────────────────────────────────────────── */
-const INITIAL_ANNOUNCEMENTS = [
-    {
-        id: 1,
-        title: 'Platform Maintenance: Oct 25th',
-        content: 'We will be performing scheduled maintenance on Oct 25th from 02:00 to 04:00 UTC. Some services may be intermittent. During this time, the lesson player and assignment submission portal will be periodically unavailable. We appreciate your patience as we optimize our backend infrastructure for a better learning experience.',
-        category: 'System',
-        date: 'Oct 23, 2026',
-        priority: 'high',
-        author: 'Admin Team'
-    },
-    {
-        id: 2,
-        title: 'New Course: Advanced System Design',
-        content: 'Discover our latest module on Microservices and Distributed Systems. Enrolling now! This course covers advanced patterns like event-sourcing, CQRS, and service meshes. Taught by Dr. Michael Torres, this is a must-have for aspiring senior engineers.',
-        category: 'Course',
-        date: 'Oct 22, 2026',
-        priority: 'normal',
-        author: 'Dr. Michael'
-    },
-    {
-        id: 3,
-        title: 'Community Guidelines Update',
-        content: 'We have updated our learner code of conduct to ensure a better collaborative environment. Key changes include stricter anti-spam policies in the discussion boards and new rewards for high-quality peer reviews. Check the handbook for the full list of updates.',
-        category: 'Policy',
-        date: 'Oct 21, 2026',
-        priority: 'low',
-        author: 'Safety Team'
-    }
-];
-
-const FEATURED = {
-    title: 'Platform Migration: Q4 Infrastructure Upgrade',
-    content: "We're upgrading our cloud core to provide faster loading times and better mobile sync. Expect limited downtime on Sunday, Oct 24th. This migration is part of our commitment to providing a seamless, lightning-fast educational platform for all our global learners.",
-    date: 'Oct 23, 2026',
-    timeLabel: '5 minutes ago',
-    tag: 'Urgent'
-};
+const formatAnnouncement = (announcement) => ({
+    id: announcement._id,
+    title: announcement.title,
+    content: announcement.content || '',
+    category:
+        announcement.audience === 'all'
+            ? 'Platform'
+            : announcement.audience === 'instructors'
+                ? 'Instructor'
+                : announcement.audience === 'learners'
+                    ? 'Learner'
+                    : announcement.courseId?.title || 'Course',
+    date: announcement.createdAt
+        ? new Date(announcement.createdAt).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+        })
+        : '',
+    priority: announcement.pinned ? 'high' : 'normal',
+    author: announcement.authorId?.name || 'Authorized Member',
+    timeLabel: announcement.createdAt
+        ? new Date(announcement.createdAt).toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+        })
+        : 'Just now',
+});
 
 export default function AnnouncementsPage() {
-    const { user } = useSelector(s => s.auth);
+    const { user } = useSelector((s) => s.auth);
     const canCreate = user?.role === 'admin' || user?.role === 'instructor';
 
-    const [announcements, setAnnouncements] = useState(INITIAL_ANNOUNCEMENTS);
+    const [announcements, setAnnouncements] = useState([]);
     const [selectedDetail, setSelectedDetail] = useState(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    const loadAnnouncements = async () => {
+        try {
+            setLoading(true);
+            const data = await fetchAnnouncements();
+            setAnnouncements((Array.isArray(data) ? data : []).map(formatAnnouncement));
+        } catch (error) {
+            toast.error(error.message || 'Failed to load announcements');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        fetchAnnouncements()
-            .then(data => {
-                if (data && data.length > 0) {
-                    const mapped = data.map(a => ({
-                        id: a._id,
-                        title: a.title,
-                        content: a.content || a.message || '',
-                        category: a.type || 'System',
-                        date: a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
-                        priority: a.priority || 'normal',
-                        author: a.createdBy?.name || 'Admin'
-                    }));
-                    setAnnouncements(prev => [...mapped, ...prev]);
-                }
-            })
-            .catch(() => {});
+        loadAnnouncements();
     }, []);
 
-    const handleCreateAnnouncement = (newAnnouncement) => {
-        setAnnouncements([{ ...newAnnouncement, id: Date.now() }, ...announcements]);
+    const featuredAnnouncement = useMemo(() => announcements[0] || null, [announcements]);
+    const remainingAnnouncements = useMemo(() => announcements.slice(1), [announcements]);
+
+    const handleCreateAnnouncement = async (payload) => {
+        const created = await createAnnouncementAPI(payload);
+        setAnnouncements((current) => [formatAnnouncement(created), ...current]);
         setIsCreateModalOpen(false);
-        toast.success("Announcement broadcasted successfully!");
+        toast.success('Announcement broadcasted successfully!');
     };
 
     return (
         <div className="min-h-screen bg-slate-50 p-6 md:p-10" style={sora}>
             <div className="max-w-5xl mx-auto space-y-10">
-
-                {/* ── Header ───────────────────────────────────── */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                     <div className="space-y-1">
                         <div className="flex items-center gap-3 text-indigo-600">
@@ -114,41 +108,60 @@ export default function AnnouncementsPage() {
                     )}
                 </div>
 
-                {/* ── Featured Announcement ────────────────────── */}
-                <div
-                    onClick={() => setSelectedDetail(FEATURED)}
-                    className="relative overflow-hidden bg-white rounded-[40px] border border-slate-100 shadow-2xl shadow-indigo-100/50 p-10 group hover:shadow-indigo-200/50 transition-all duration-500 cursor-pointer"
-                >
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-full blur-3xl -mr-20 -mt-20 opacity-50" />
+                {featuredAnnouncement && (
+                    <div
+                        onClick={() => setSelectedDetail(featuredAnnouncement)}
+                        className="relative overflow-hidden bg-white rounded-[40px] border border-slate-100 shadow-2xl shadow-indigo-100/50 p-10 group hover:shadow-indigo-200/50 transition-all duration-500 cursor-pointer"
+                    >
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-full blur-3xl -mr-20 -mt-20 opacity-50" />
 
-                    <div className="relative flex flex-col md:flex-row gap-10 items-center">
-                        <div className="w-20 h-20 bg-indigo-600 rounded-[28px] flex items-center justify-center text-white shadow-xl shadow-indigo-100 group-hover:scale-110 transition-transform duration-500">
-                            <HiSpeakerphone className="w-10 h-10" />
-                        </div>
-                        <div className="flex-1 space-y-3 text-center md:text-left">
-                            <div className="flex items-center justify-center md:justify-start gap-3">
-                                <Badge color="red" variant="glass" className="font-black text-[9px] tracking-widest px-3 py-1 uppercase">{FEATURED.tag}</Badge>
-                                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest" style={mono}>{FEATURED.timeLabel}</span>
+                        <div className="relative flex flex-col md:flex-row gap-10 items-center">
+                            <div className="w-20 h-20 bg-indigo-600 rounded-[28px] flex items-center justify-center text-white shadow-xl shadow-indigo-100 group-hover:scale-110 transition-transform duration-500">
+                                <HiSpeakerphone className="w-10 h-10" />
                             </div>
-                            <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight group-hover:text-indigo-600 transition-colors">{FEATURED.title}</h2>
-                            <p className="text-slate-500 font-medium leading-relaxed max-w-2xl text-sm">
-                                {FEATURED.content.substring(0, 140)}...
-                            </p>
+                            <div className="flex-1 space-y-3 text-center md:text-left">
+                                <div className="flex items-center justify-center md:justify-start gap-3">
+                                    <Badge
+                                        color={featuredAnnouncement.priority === 'high' ? 'rose' : 'blue'}
+                                        variant="glass"
+                                        className="font-black text-[9px] tracking-widest px-3 py-1 uppercase"
+                                    >
+                                        {featuredAnnouncement.priority === 'high' ? 'Urgent' : 'Featured'}
+                                    </Badge>
+                                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest" style={mono}>
+                                        {featuredAnnouncement.timeLabel}
+                                    </span>
+                                </div>
+                                <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight group-hover:text-indigo-600 transition-colors">
+                                    {featuredAnnouncement.title}
+                                </h2>
+                                <p className="text-slate-500 font-medium leading-relaxed max-w-2xl text-sm">
+                                    {featuredAnnouncement.content.substring(0, 140)}...
+                                </p>
+                            </div>
+                            <Button
+                                variant="outline"
+                                className="rounded-xl px-10 py-3 border-slate-100 hover:border-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedDetail(featuredAnnouncement);
+                                }}
+                            >
+                                Details
+                            </Button>
                         </div>
-                        <Button
-                            variant="outline"
-                            className="rounded-xl px-10 py-3 border-slate-100 hover:border-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm"
-                            onClick={(e) => { e.stopPropagation(); setSelectedDetail(FEATURED); }}
-                        >
-                            Details
-                        </Button>
                     </div>
-                </div>
+                )}
 
-                {/* ── Grid List ────────────────────────────────── */}
+                {!loading && announcements.length === 0 && (
+                    <div className="bg-white rounded-[32px] border border-slate-100 p-10 text-center text-slate-500 shadow-sm">
+                        No announcements available yet.
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <AnimatePresence>
-                        {announcements.map(item => (
+                        {remainingAnnouncements.map((item) => (
                             <motion.div
                                 key={item.id}
                                 layout
@@ -156,17 +169,13 @@ export default function AnnouncementsPage() {
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.9 }}
                             >
-                                <AnnouncementCard
-                                    data={item}
-                                    onClick={() => setSelectedDetail(item)}
-                                />
+                                <AnnouncementCard data={item} onClick={() => setSelectedDetail(item)} />
                             </motion.div>
                         ))}
                     </AnimatePresence>
                 </div>
             </div>
 
-            {/* ── Detail Modal ─────────────────────────────── */}
             <AnimatePresence>
                 {selectedDetail && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
@@ -196,7 +205,9 @@ export default function AnnouncementsPage() {
                                         <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-sm">
                                             <HiInformationCircle className="w-7 h-7" />
                                         </div>
-                                        <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{selectedDetail.category || 'Platform Update'}</span>
+                                        <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">
+                                            {selectedDetail.category || 'Platform Update'}
+                                        </span>
                                     </div>
                                     <h2 className="text-3xl font-black text-slate-900 leading-tight tracking-tight">
                                         {selectedDetail.title}
@@ -226,7 +237,6 @@ export default function AnnouncementsPage() {
                 )}
             </AnimatePresence>
 
-            {/* ── Create Modal ─────────────────────────────── */}
             <CreateAnnouncementModal
                 open={isCreateModalOpen}
                 user={user}
@@ -237,128 +247,133 @@ export default function AnnouncementsPage() {
     );
 }
 
-/* ─── Create Announcement Modal ─────────────────────────────── */
 function CreateAnnouncementModal({ open, onClose, onPublish, user }) {
     const [title, setTitle] = useState('');
     const [category, setCategory] = useState('System');
     const [priority, setPriority] = useState('normal');
     const [content, setContent] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     if (!open) return null;
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        onPublish({
-            title,
-            category,
-            priority,
-            content,
-            author: user?.name || 'Authorized Member',
-            date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        });
 
-        // Reset states
-        setTitle('');
-        setCategory('System');
-        setPriority('normal');
-        setContent('');
+        try {
+            setIsSubmitting(true);
+            await onPublish({
+                title,
+                content,
+                audience: user?.role === 'admin' ? 'all' : 'instructors',
+                pinned: priority === 'high',
+            });
+            setTitle('');
+            setCategory('System');
+            setPriority('normal');
+            setContent('');
+        } catch (error) {
+            toast.error(error.message || 'Failed to publish announcement');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
         <AnimatePresence>
-            {open && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
-                        onClick={onClose}
-                    />
-                    <motion.div
-                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                        className="bg-white w-full max-w-xl rounded-3xl shadow-2xl p-8 relative z-10"
-                    >
-                        <div className="flex items-center justify-between mb-8">
-                            <h2 className="text-2xl font-black text-slate-800 tracking-tight">Post Announcement</h2>
-                            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all">
-                                <HiX className="w-5 h-5" />
-                            </button>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
+                    onClick={onClose}
+                />
+                <motion.div
+                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                    className="bg-white w-full max-w-xl rounded-3xl shadow-2xl p-8 relative z-10"
+                >
+                    <div className="flex items-center justify-between mb-8">
+                        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Post Announcement</h2>
+                        <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-all">
+                            <HiX className="w-5 h-5" />
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Announcement Title</label>
+                            <input
+                                required
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                type="text"
+                                placeholder="e.g., Mandatory Maintenance Expected..."
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm font-bold text-slate-800"
+                            />
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Announcement Title</label>
-                                <input
-                                    required
-                                    value={title}
-                                    onChange={(e) => setTitle(e.target.value)}
-                                    type="text"
-                                    placeholder="e.g., Mandatory Maintenance Expected..."
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm font-bold text-slate-800"
+                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Category</label>
+                                <CustomSelect
+                                    value={category}
+                                    onChange={setCategory}
+                                    options={[
+                                        { value: 'System', label: 'System' },
+                                        { value: 'Course', label: 'Course' },
+                                        { value: 'Policy', label: 'Policy' },
+                                        { value: 'Event', label: 'Event' }
+                                    ]}
                                 />
                             </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Category</label>
-                                    <CustomSelect
-                                        value={category}
-                                        onChange={setCategory}
-                                        options={[
-                                            { value: 'System', label: 'System' },
-                                            { value: 'Course', label: 'Course' },
-                                            { value: 'Policy', label: 'Policy' },
-                                            { value: 'Event', label: 'Event' }
-                                        ]}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Priority</label>
-                                    <CustomSelect
-                                        value={priority}
-                                        onChange={setPriority}
-                                        options={[
-                                            { value: 'low', label: 'Standard / Low' },
-                                            { value: 'normal', label: 'Normal' },
-                                            { value: 'high', label: 'High / Urgent' }
-                                        ]}
-                                    />
-                                </div>
-                            </div>
-
                             <div className="space-y-2">
-                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Details & Content</label>
-                                <textarea
-                                    required
-                                    value={content}
-                                    onChange={(e) => setContent(e.target.value)}
-                                    rows={4}
-                                    placeholder="Write the full announcement logic here..."
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-slate-800 font-medium resize-none"
+                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Priority</label>
+                                <CustomSelect
+                                    value={priority}
+                                    onChange={setPriority}
+                                    options={[
+                                        { value: 'low', label: 'Standard / Low' },
+                                        { value: 'normal', label: 'Normal' },
+                                        { value: 'high', label: 'High / Urgent' }
+                                    ]}
                                 />
                             </div>
+                        </div>
 
-                            <div className="pt-4 border-t border-slate-100 flex justify-end gap-3 mt-4">
-                                <Button variant="outline" type="button" onClick={onClose} className="rounded-xl px-6">Cancel</Button>
-                                <Button type="submit" className="rounded-xl px-8 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-100">Broadcast Now</Button>
-                            </div>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
+                        <div className="space-y-2">
+                            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Details & Content</label>
+                            <textarea
+                                required
+                                value={content}
+                                onChange={(e) => setContent(e.target.value)}
+                                rows={4}
+                                placeholder="Write the full announcement here..."
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-slate-800 font-medium resize-none"
+                            />
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-100 flex justify-end gap-3 mt-4">
+                            <Button variant="outline" type="button" onClick={onClose} className="rounded-xl px-6" disabled={isSubmitting}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" loading={isSubmitting} className="rounded-xl px-8 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-100">
+                                Broadcast Now
+                            </Button>
+                        </div>
+                    </form>
+                </motion.div>
+            </div>
         </AnimatePresence>
     );
 }
 
-/* ─── Card Component ────────────────────────────────────────── */
 function AnnouncementCard({ data, onClick }) {
     const priorityColors = {
-        high: "emerald",
-        normal: "blue",
-        low: "slate"
+        high: 'emerald',
+        normal: 'blue',
+        low: 'slate'
     };
 
     return (
@@ -395,7 +410,6 @@ function AnnouncementCard({ data, onClick }) {
     );
 }
 
-/* ─── Custom Select Component ───────────────────────────────── */
 function CustomSelect({ value, onChange, options }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
@@ -406,11 +420,11 @@ function CustomSelect({ value, onChange, options }) {
                 setOpen(false);
             }
         }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const selectedOption = options.find(opt => opt.value === value) || options[0];
+    const selectedOption = options.find((opt) => opt.value === value) || options[0];
 
     return (
         <div className="relative" ref={ref}>
@@ -418,12 +432,12 @@ function CustomSelect({ value, onChange, options }) {
                 type="button"
                 onClick={() => setOpen(!open)}
                 className={clsx(
-                    "w-full px-4 py-3 bg-slate-50 border rounded-xl outline-none transition-all text-sm font-bold flex justify-between items-center text-left",
-                    open ? "border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-700 bg-white" : "border-slate-200 hover:border-slate-300 text-slate-800"
+                    'w-full px-4 py-3 bg-slate-50 border rounded-xl outline-none transition-all text-sm font-bold flex justify-between items-center text-left',
+                    open ? 'border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-700 bg-white' : 'border-slate-200 hover:border-slate-300 text-slate-800'
                 )}
             >
                 <span className="truncate">{selectedOption.label}</span>
-                <HiChevronDown className={clsx("w-4 h-4 text-slate-400 transition-transform ml-2 shrink-0", open && "rotate-180")} />
+                <HiChevronDown className={clsx('w-4 h-4 text-slate-400 transition-transform ml-2 shrink-0', open && 'rotate-180')} />
             </button>
 
             <AnimatePresence>
@@ -444,8 +458,8 @@ function CustomSelect({ value, onChange, options }) {
                                     setOpen(false);
                                 }}
                                 className={clsx(
-                                    "w-full px-4 py-2.5 text-left text-sm font-bold transition-colors hover:bg-slate-50",
-                                    value === opt.value ? "text-indigo-600 bg-indigo-50/50" : "text-slate-700"
+                                    'w-full px-4 py-2.5 text-left text-sm font-bold transition-colors hover:bg-slate-50',
+                                    value === opt.value ? 'text-indigo-600 bg-indigo-50/50' : 'text-slate-700'
                                 )}
                             >
                                 {opt.label}

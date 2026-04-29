@@ -5,9 +5,10 @@ import { createNotificationsForUsers } from '../notification/notification.servic
 import { createGoogleClassroomCourse } from './googleClassroom.service.js';
 
 import { createAppError } from '../../utils/constants.js';
+import { logEvent } from '../auditLog/auditLog.service.js';
 
-export const createCourse = async ({ title, description, instructorId, category, difficulty, duration, thumbnail, tags, status }) =>
-	Course.create({
+export const createCourse = async ({ title, description, instructorId, category, difficulty, duration, thumbnail, tags, status }, actor) => {
+	const course = await Course.create({
 		title,
 		description,
 		instructorId,
@@ -16,8 +17,19 @@ export const createCourse = async ({ title, description, instructorId, category,
 		duration,
 		thumbnail,
 		tags,
-		status,
+		status: actor?.role === 'admin' && ['draft', 'published', 'archived'].includes(status) ? status : 'draft',
 	});
+
+	await logEvent({
+		type: 'mod',
+		event: `Course created: "${title}"`,
+		userId: instructorId,
+		severity: 'low',
+		meta: { courseId: course._id, category, status: course.status },
+	});
+
+	return course;
+};
 
 export const getCourses = async (query = {}) => {
 	const filter = { status: 'published' };
@@ -61,6 +73,10 @@ export const getCourseById = async (courseId) => {
 		throw createAppError('Course not found', 404);
 	}
 
+	if (course.status !== 'published') {
+		throw createAppError('Course is awaiting admin approval', 403);
+	}
+
 	return course;
 };
 
@@ -69,6 +85,10 @@ export const getCourseWithDetails = async (courseId) => {
 
 	if (!course) {
 		throw createAppError('Course not found', 404);
+	}
+
+	if (course.status !== 'published') {
+		throw createAppError('Course is awaiting admin approval', 403);
 	}
 
 	const lessons = await findLessonsByCourseId(courseId);
@@ -81,12 +101,37 @@ export const getCourseWithDetails = async (courseId) => {
 	};
 };
 
-export const updateCourse = async (courseId, updateData) => {
-	const course = await Course.findByIdAndUpdate(courseId, updateData, { new: true, runValidators: true });
+export const updateCourse = async (courseId, updateData, actor) => {
+	const course = await Course.findById(courseId);
 	if (!course) {
 		throw createAppError('Course not found', 404);
 	}
-	return course;
+
+	if (actor?.role !== 'admin' && String(course.instructorId) !== String(actor?._id)) {
+		throw createAppError('Forbidden: insufficient permissions', 403);
+	}
+
+	const nextData = { ...updateData };
+
+	if (actor?.role !== 'admin') {
+		delete nextData.status;
+	}
+
+	Object.assign(course, nextData);
+	await course.save();
+
+	// Log status changes (publish, archive, draft)
+	if (updateData.status && updateData.status !== course.status) {
+		await logEvent({
+			type: 'mod',
+			event: `Course "${course.title}" status changed to ${updateData.status}`,
+			userId: actor?._id,
+			severity: updateData.status === 'published' ? 'low' : 'medium',
+			meta: { courseId, newStatus: updateData.status },
+		});
+	}
+
+	return Course.findById(courseId).populate('instructorId', 'name email role');
 };
 
 export const deleteCourse = async (courseId) => {
@@ -94,6 +139,14 @@ export const deleteCourse = async (courseId) => {
 	if (!course) {
 		throw createAppError('Course not found', 404);
 	}
+
+	await logEvent({
+		type: 'mod',
+		event: `Course deleted: "${course.title}"`,
+		severity: 'high',
+		meta: { courseId },
+	});
+
 	return course;
 };
 

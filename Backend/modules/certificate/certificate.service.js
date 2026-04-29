@@ -7,6 +7,7 @@ import Enrollment from '../enrollment/enrollment.model.js';
 import Course from '../course/course.model.js';
 
 import { createAppError } from '../../utils/constants.js';
+import { logEvent } from '../auditLog/auditLog.service.js';
 
 const generateCertificateNumber = () => {
 	const prefix = 'LMS';
@@ -35,12 +36,23 @@ export const issueCertificate = async ({ userId, courseId }) => {
 		return existingCert;
 	}
 
-	return Certificate.create({
+	const cert = await Certificate.create({
 		userId,
 		courseId,
 		certificateNumber: generateCertificateNumber(),
 		grade: 'Pass',
 	});
+
+	const course = await Course.findById(courseId).select('title');
+	await logEvent({
+		type: 'system',
+		event: `Certificate issued for "${course?.title || courseId}"`,
+		userId,
+		severity: 'low',
+		meta: { certificateNumber: cert.certificateNumber },
+	});
+
+	return cert;
 };
 
 export const getCertificatesByUser = async (userId) =>

@@ -20,6 +20,8 @@ import agoraRoutes from '../modules/agora/agora.routes.js';
 import noteRoutes from '../modules/note/note.routes.js';
 import discussionRoutes from '../modules/discussion/discussion.routes.js';
 import notificationRoutes from '../modules/notification/notification.routes.js';
+import reportRoutes from '../modules/report/report.routes.js';
+import auditLogRoutes from '../modules/auditLog/auditLog.routes.js';
 
 const router = express.Router();
 
@@ -49,6 +51,7 @@ router.get('/', (req, res) => {
 			'/api/notes',
 			'/api/discussions',
 			'/api/notifications',
+			'/api/reports',
 		],
 	});
 });
@@ -81,5 +84,7 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/notes', noteRoutes);
 router.use('/discussions', discussionRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/reports', reportRoutes);
+router.use('/audit-logs', auditLogRoutes);
 
 export default router;

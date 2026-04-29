@@ -3,6 +3,7 @@ import User from '../user/user.model.js';
 import { hasApprovedAccess } from '../message-access/messageAccess.service.js';
 
 import { createAppError } from '../../utils/constants.js';
+import { logEvent } from '../auditLog/auditLog.service.js';
 
 export const sendMessage = async ({ senderId, receiverId, subject, content }) => {
 	const sender = await User.findById(senderId).select('role');
@@ -29,7 +30,27 @@ export const sendMessage = async ({ senderId, receiverId, subject, content }) =>
 		}
 	}
 
-	return Message.create({ senderId, receiverId, subject, content });
+	const createdMessage = await Message.create({ senderId, receiverId, subject, content });
+
+	const populated = await Message.findById(createdMessage._id)
+		.populate('senderId', 'name email role')
+		.populate('receiverId', 'name email role');
+
+	await logEvent({
+		type: 'content',
+		event: `Message sent: "${populated.senderId?.name}" → "${populated.receiverId?.name}" — Subject: ${subject || '(no subject)'}`,
+		user: populated.senderId?.name || 'unknown',
+		userId: senderId,
+		severity: 'low',
+		meta: {
+			messageId: createdMessage._id,
+			senderName: populated.senderId?.name,
+			receiverName: populated.receiverId?.name,
+			subject,
+		},
+	});
+
+	return populated;
 };
 
 export const getInbox = async (userId) =>

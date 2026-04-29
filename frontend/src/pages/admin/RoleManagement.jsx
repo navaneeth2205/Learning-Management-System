@@ -1,136 +1,168 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import {
-    HiShieldCheck, HiUserGroup, HiLockClosed, HiPencilAlt,
-    HiCheck, HiX, HiPlus, HiDotsHorizontal, HiDuplicate, HiTrash, HiBan
-} from 'react-icons/hi';
+import { HiLockClosed, HiShieldCheck, HiUserGroup } from 'react-icons/hi';
+
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
-import { Table, Thead, Tbody, Tr, Th, Td } from '../../components/ui/Table';
+import { Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui/Table';
+import { ROLES } from '../../constants/roles';
+import { fetchAdminUsers } from '../../services/learnerApi';
+
+const ROLE_DEFINITIONS = [
+    {
+        key: ROLES.ADMIN,
+        title: 'Administrator',
+        permissions: ['Full platform oversight', 'Role assignment', 'Course moderation', 'System access'],
+        badge: 'emerald',
+    },
+    {
+        key: ROLES.INSTRUCTOR,
+        title: 'Instructor',
+        permissions: ['Create courses', 'Grade submissions', 'Manage learners', 'Publish content'],
+        badge: 'violet',
+    },
+    {
+        key: ROLES.LEARNER,
+        title: 'Learner',
+        permissions: ['Enroll in courses', 'Attempt quizzes', 'View grades', 'Join discussions'],
+        badge: 'slate',
+    },
+];
 
 export default function RoleManagement() {
-    const [openMenuId, setOpenMenuId] = useState(null);
-    const roles = [
-        {
-            id: 1,
-            name: 'System Admin',
-            users: 5,
-            permissions: ['Full Access', 'User Management', 'Billing', 'System Logs'],
-            status: 'active'
-        },
-        {
-            id: 2,
-            name: 'Instructor',
-            users: 124,
-            permissions: ['Course Creation', 'Grading', 'Analytics', 'Student Interaction'],
-            status: 'active'
-        },
-        {
-            id: 3,
-            name: 'Learner',
-            users: 12500,
-            permissions: ['Course Enrollment', 'Lessons', 'Quizzes', 'Personal Profile'],
-            status: 'active'
-        },
-        {
-            id: 4,
-            name: 'Moderator',
-            users: 12,
-            permissions: ['Course Review', 'Content Flagging', 'Support Tickets'],
-            status: 'active'
-        }
-    ];
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        let active = true;
+
+        fetchAdminUsers()
+            .then((data) => {
+                if (!active) return;
+                setUsers(Array.isArray(data) ? data : []);
+                setError('');
+            })
+            .catch((err) => {
+                if (!active) return;
+                setError(err.message || 'Failed to load roles');
+            })
+            .finally(() => {
+                if (active) setLoading(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    const roleRows = useMemo(() => {
+        return ROLE_DEFINITIONS.map((role) => ({
+            ...role,
+            users: users.filter((user) => user.role === role.key).length,
+        }));
+    }, [users]);
 
     return (
-        <div className="p-6 space-y-8 max-w-7xl mx-auto">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-8">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                 <div>
-                    <h1 className="text-3xl font-bold text-text-primary text-slate-900">Roles & Permissions</h1>
-                    <p className="text-text-secondary">Define and manage platform access levels and security policies.</p>
+                    <h1 className="text-3xl font-black text-slate-900">Roles & Permissions</h1>
+                    <p className="text-slate-500 mt-2">
+                        Existing platform roles are now tied to live user counts so admins can manage instructor and learner access with confidence.
+                    </p>
                 </div>
-                <Button icon={<HiPlus />} onClick={() => toast.success('Create Custom Role wizard opened!')}>Create Custom Role</Button>
+                <Button
+                    className="bg-violet-600 hover:bg-violet-700 text-white border-none"
+                    icon={<HiShieldCheck />}
+                    onClick={() => toast.success('Use User Management to reassign learners, instructors, and admins.')}
+                >
+                    Reassignment Guide
+                </Button>
             </div>
 
-            <div className="grid grid-cols-1 gap-6">
-                <div className="bg-white rounded-2xl border border-surface-border shadow-card overflow-visible">
-                    <Table>
-                        <Thead>
-                            <Th>Role Name</Th>
-                            <Th>Users</Th>
-                            <Th>Core Permissions</Th>
-                            <Th>Status</Th>
-                            <th className="px-6 py-4 text-right">Actions</th>
-                        </Thead>
-                        <Tbody>
-                            {roles.map(role => (
-                                <Tr key={role.id}>
-                                    <Td>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center">
-                                                <HiShieldCheck className="w-5 h-5" />
-                                            </div>
-                                            <span className="font-bold text-text-primary">{role.name}</span>
-                                        </div>
-                                    </Td>
-                                    <Td>
-                                        <div className="flex items-center gap-1.5 font-medium text-text-secondary">
-                                            <HiUserGroup className="w-4 h-4" /> {role.users.toLocaleString()}
-                                        </div>
-                                    </Td>
-                                    <Td>
-                                        <div className="flex flex-wrap gap-2 max-w-md">
-                                            {role.permissions.map(p => (
-                                                <span key={p} className="px-2 py-0.5 bg-slate-100 text-[10px] font-bold text-slate-600 rounded-md border border-slate-200">
-                                                    {p.toUpperCase()}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </Td>
-                                    <Td>
-                                        <Badge color="green" dot>Active</Badge>
-                                    </Td>
-                                    <Td className="text-right">
-                                        <div className="flex items-center justify-end gap-2">
-                                            <Button size="sm" variant="outline" icon={<HiLockClosed />} onClick={() => toast.success(`Editing permissions for ${role.name}`)}>Permissions</Button>
-                                            <div className="relative">
-                                                <button onClick={() => setOpenMenuId(openMenuId === role.id ? null : role.id)} className="p-2 text-text-muted hover:text-text-primary hover:bg-surface-muted rounded-lg transition-colors"><HiDotsHorizontal /></button>
-                                                {openMenuId === role.id && (
-                                                    <>
-                                                        <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
-                                                        <div className="absolute right-0 mt-1 w-44 bg-white border border-surface-border rounded-xl shadow-dropdown py-1.5 z-50 animate-fade-in origin-top-right">
-                                                            <button onClick={() => { setOpenMenuId(null); toast.success(`Editing role: ${role.name}`); }} className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-muted transition-colors flex items-center gap-2">
-                                                                <HiPencilAlt className="w-4 h-4 text-text-muted" /> Edit Role
-                                                            </button>
-                                                            <button onClick={() => { setOpenMenuId(null); toast.success(`Cloned role: ${role.name}`); }} className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-muted transition-colors flex items-center gap-2">
-                                                                <HiDuplicate className="w-4 h-4 text-text-muted" /> Clone Role
-                                                            </button>
-                                                            <button onClick={() => { setOpenMenuId(null); toast(`${role.name} deactivated.`, { icon: '🚫' }); }} className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-muted transition-colors flex items-center gap-2">
-                                                                <HiBan className="w-4 h-4 text-text-muted" /> Deactivate
-                                                            </button>
-                                                            <div className="my-1 border-t border-surface-border" />
-                                                            <button onClick={() => { setOpenMenuId(null); toast.error(`Deleted role: ${role.name}`); }} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2">
-                                                                <HiTrash className="w-4 h-4 text-red-500" /> Delete Role
-                                                            </button>
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </Td>
-                                </Tr>
-                            ))}
-                        </Tbody>
-                    </Table>
-                </div>
-
-                {/* Security Audit Log Shortcut */}
-                <div className="bg-white rounded-2xl p-8 flex flex-col md:flex-row items-center justify-between gap-8 shadow-card border border-surface-border border-l-4 border-l-violet-500">
-                    <div className="space-y-2">
-                        <h3 className="text-xl font-bold text-text-primary">Recent Permission Changes</h3>
-                        <p className="text-text-secondary text-sm max-w-md">Track all changes made to role definitions and user assignments for compliance and safety.</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {roleRows.map((role) => (
+                    <div key={role.key} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                        <div className="flex items-center justify-between">
+                            <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
+                                <HiUserGroup className="w-5 h-5" />
+                            </div>
+                            <Badge color={role.badge}>{role.key}</Badge>
+                        </div>
+                        <p className="text-2xl font-black text-slate-900 mt-4">{role.users}</p>
+                        <p className="font-bold text-slate-800 mt-1">{role.title}</p>
                     </div>
-                    <Button className="bg-slate-900 text-white hover:bg-slate-800 px-8">View Security Audit</Button>
+                ))}
+            </div>
+
+            {error && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+                    {error}
                 </div>
+            )}
+
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <Table>
+                    <Thead>
+                        <Th>Role</Th>
+                        <Th>Assigned Users</Th>
+                        <Th>Core Permissions</Th>
+                        <Th align="right">Actions</Th>
+                    </Thead>
+                    <Tbody>
+                        {loading ? (
+                            <Tr>
+                                <Td colSpan={4} className="py-10 text-slate-500">Loading role data...</Td>
+                            </Tr>
+                        ) : roleRows.map((role) => (
+                            <Tr key={role.key}>
+                                <Td>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
+                                            <HiShieldCheck className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-slate-900">{role.title}</p>
+                                            <p className="text-xs text-slate-500 uppercase tracking-[0.18em]">{role.key}</p>
+                                        </div>
+                                    </div>
+                                </Td>
+                                <Td>
+                                    <span className="font-bold text-slate-900">{role.users}</span>
+                                </Td>
+                                <Td>
+                                    <div className="flex flex-wrap gap-2">
+                                        {role.permissions.map((permission) => (
+                                            <span key={permission} className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold border border-slate-200">
+                                                {permission}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </Td>
+                                <Td className="text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            icon={<HiLockClosed />}
+                                            onClick={() => toast.success(`${role.title} permissions are active.`)}
+                                        >
+                                            View Access
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            className="bg-slate-900 text-white hover:bg-slate-800 border-none"
+                                            onClick={() => toast.success('Update role assignments from User Management.')}
+                                        >
+                                            Manage Members
+                                        </Button>
+                                    </div>
+                                </Td>
+                            </Tr>
+                        ))}
+                    </Tbody>
+                </Table>
             </div>
         </div>
     );

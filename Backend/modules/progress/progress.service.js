@@ -7,6 +7,7 @@ import Progress from './progress.model.js';
 import { countLessonsByCourseId } from '../lesson/lesson.service.js';
 
 import { createAppError } from '../../utils/constants.js';
+import { logEvent } from '../auditLog/auditLog.service.js';
 
 const countUniqueIds = (values = []) => new Set(values.map((value) => String(value))).size;
 
@@ -37,7 +38,21 @@ export const recalculateProgressForCourse = async ({ userId, courseId, progressR
 		? Math.min(100, Math.round((totalCompleted / totalRequirements) * 100))
 		: 0;
 
+	const wasAlreadyComplete = progressRecord?.completionPercentage >= 100;
 	await progress.save();
+
+	// Log course completion milestone (only once — when it first hits 100%)
+	if (progress.completionPercentage >= 100 && !wasAlreadyComplete) {
+		const course = await Course.findById(courseId).select('title');
+		await logEvent({
+			type: 'system',
+			event: `Course completed: "${course?.title || courseId}"`,
+			userId,
+			severity: 'low',
+			meta: { courseId, completionPercentage: 100 },
+		});
+	}
+
 	return progress;
 };
 

@@ -145,6 +145,11 @@ export default function SignupPage() {
                                 </button>
                             ))}
                         </div>
+                        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                            <p className="text-xs font-semibold text-amber-800 leading-relaxed">
+                                Admin accounts are not available through public sign up. An existing administrator must promote your account to the <span className="font-bold">admin</span> role from the Admin User Management screen.
+                            </p>
+                        </div>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
