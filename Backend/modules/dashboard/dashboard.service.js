@@ -5,6 +5,7 @@ import Certificate from '../certificate/certificate.model.js';
 import QuizAttempt from '../quiz/quizAttempt.model.js';
 import Submission from '../submission/submission.model.js';
 import User from '../user/user.model.js';
+import Assignment from '../assignment/assignment.model.js';
 import { recalculateProgressForCourse } from '../progress/progress.service.js';
 
 export const getLearnerDashboardStats = async (userId) => {
@@ -141,38 +142,213 @@ export const getGradesForLearner = async (userId) => {
 };
 
 export const getInstructorDashboardStats = async (instructorId) => {
-    // 1. Get all courses by this instructor
-    const courses = await Course.find({ instructorId });
-    const courseIds = courses.map(c => c._id);
+	const courses = await Course.find({ instructorId }).lean();
+	const courseIds = courses.map((course) => course._id);
 
-    // 2. Count total enrollments for these courses
-    const totalEnrollments = await Enrollment.countDocuments({ courseId: { $in: courseIds } });
+	if (courseIds.length === 0) {
+		return {
+			totalEnrollments: 0,
+			pendingGrading: 0,
+			avgRating: 0,
+			totalCourses: 0,
+			avgAttendance: 0,
+			recentEnrollments: [],
+			retentionData: [],
+			recentEvents: [],
+			topCourse: null,
+			creatorInsight: {
+				title: 'Build your first live course signal',
+				body: 'Publish a course and enroll learners to unlock live retention, activity, and performance insights here.',
+				ctaLabel: 'Create Course',
+			},
+		};
+	}
 
-    // 3. Count pending submissions (needs_grading)
-    const pendingGrading = await Submission.countDocuments({ 
-        courseId: { $in: courseIds }, 
-        status: 'needs_grading' 
-    });
+	const courseMap = new Map(courses.map((course) => [course._id.toString(), course]));
 
-    // 4. Calculate average rating
-    const avgRating = courses.reduce((acc, curr) => acc + (curr.rating || 0), 0) / (courses.length || 1);
+	const [enrollmentCounts, progressStats, assignments, recentEnrollments] = await Promise.all([
+		Enrollment.aggregate([
+			{ $match: { courseId: { $in: courseIds } } },
+			{
+				$group: {
+					_id: '$courseId',
+					count: { $sum: 1 },
+					latestEnrollmentAt: { $max: '$enrolledAt' },
+				},
+			},
+		]),
+		Progress.aggregate([
+			{ $match: { courseId: { $in: courseIds } } },
+			{
+				$group: {
+					_id: '$courseId',
+					completed: {
+						$sum: {
+							$cond: [{ $gte: ['$completionPercentage', 100] }, 1, 0],
+						},
+					},
+					active: {
+						$sum: {
+							$cond: [{ $gt: ['$completionPercentage', 0] }, 1, 0],
+						},
+					},
+					averageProgress: { $avg: '$completionPercentage' },
+				},
+			},
+		]),
+		Assignment.find({ courseId: { $in: courseIds } }).select('_id courseId title').lean(),
+		Enrollment.find({ courseId: { $in: courseIds } })
+			.sort({ enrolledAt: -1 })
+			.limit(5)
+			.populate('userId', 'name email'),
+	]);
 
-    // 5. Get recent activity (newest enrollments)
-    const recentEnrollments = await Enrollment.find({ courseId: { $in: courseIds } })
-        .sort({ enrolledAt: -1 })
-        .limit(5)
-        .populate('userId', 'name email');
+	const assignmentIds = assignments.map((assignment) => assignment._id);
+	const assignmentMap = new Map(assignments.map((assignment) => [assignment._id.toString(), assignment]));
+	const enrollmentCountMap = new Map(enrollmentCounts.map((item) => [item._id.toString(), item]));
+	const progressMap = new Map(progressStats.map((item) => [item._id.toString(), item]));
 
-    return {
-        totalEnrollments,
-        pendingGrading,
-        avgRating: Number(avgRating.toFixed(1)),
-        totalCourses: courses.length,
-        avgAttendance: 92, // Mock for now
-        recentEnrollments: recentEnrollments.map(e => ({
-            studentName: e.userId?.name,
-            courseTitle: courses.find(c => c._id.toString() === e.courseId.toString())?.title,
-            date: e.enrolledAt
-        }))
-    };
+	const pendingSubmissionFilter = assignmentIds.length > 0 ? { assignmentId: { $in: assignmentIds }, grade: null } : null;
+	const [pendingGrading, recentPendingSubmissions] = pendingSubmissionFilter
+		? await Promise.all([
+				Submission.countDocuments(pendingSubmissionFilter),
+				Submission.find(pendingSubmissionFilter)
+					.sort({ createdAt: -1 })
+					.limit(5)
+					.populate('userId', 'name email')
+					.populate({
+						path: 'assignmentId',
+						select: 'title courseId',
+						populate: {
+							path: 'courseId',
+							select: 'title',
+						},
+					}),
+		  ])
+		: [0, []];
+
+	const coursePerformance = courses
+		.map((course) => {
+			const courseId = course._id.toString();
+			const enrollments = enrollmentCountMap.get(courseId)?.count || 0;
+			const progress = progressMap.get(courseId);
+			const completed = progress?.completed || 0;
+			const activeLearners = progress?.active || 0;
+			const retentionRate = enrollments > 0 ? Math.round((completed / enrollments) * 100) : 0;
+			const dropoffRate = enrollments > 0 ? Math.max(0, 100 - retentionRate) : 0;
+			const averageProgress = progress?.averageProgress ? Number(progress.averageProgress.toFixed(1)) : 0;
+
+			return {
+				courseId: course._id,
+				title: course.title,
+				category: course.category || 'General',
+				status: course.status,
+				rating: Number((course.rating || 0).toFixed(1)),
+				reviewCount: course.reviewCount || 0,
+				enrollments,
+				activeLearners,
+				completedLearners: completed,
+				retentionRate,
+				dropoffRate,
+				averageProgress,
+				googleClassroom: course.googleClassroom || {},
+				createdAt: course.createdAt,
+			};
+		})
+		.sort((a, b) => {
+			if (b.enrollments !== a.enrollments) {
+				return b.enrollments - a.enrollments;
+			}
+
+			if (b.retentionRate !== a.retentionRate) {
+				return b.retentionRate - a.retentionRate;
+			}
+
+			return b.rating - a.rating;
+		});
+
+	const totalEnrollments = coursePerformance.reduce((sum, course) => sum + course.enrollments, 0);
+	const totalActiveLearners = coursePerformance.reduce((sum, course) => sum + course.activeLearners, 0);
+	const avgAttendance = totalEnrollments > 0 ? Number(((totalActiveLearners / totalEnrollments) * 100).toFixed(1)) : 0;
+	const avgRating =
+		coursePerformance.length > 0
+			? Number(
+					(
+						coursePerformance.reduce((sum, course) => sum + (course.rating || 0), 0) /
+						coursePerformance.length
+					).toFixed(1)
+			  )
+			: 0;
+
+	const retentionData = coursePerformance.slice(0, 6).map((course) => ({
+		name: course.title,
+		completion: course.retentionRate,
+		dropoff: course.dropoffRate,
+		enrollments: course.enrollments,
+		averageProgress: course.averageProgress,
+	}));
+
+	const recentEvents = [
+		...recentEnrollments.map((enrollment) => ({
+			type: 'enrollment',
+			title: 'New Student Enrollment',
+			description: `${enrollment.userId?.name || 'A learner'} joined ${
+				courseMap.get(enrollment.courseId.toString())?.title || 'your course'
+			}`,
+			occurredAt: enrollment.enrolledAt,
+		})),
+		...recentPendingSubmissions.map((submission) => ({
+			type: 'submission',
+			title: 'Submission Ready to Grade',
+			description: `${submission.userId?.name || 'A learner'} submitted ${
+				submission.assignmentId?.title || 'an assignment'
+			}`,
+			occurredAt: submission.createdAt,
+		})),
+		...coursePerformance
+			.filter((course) => course.status === 'published')
+			.slice(0, 3)
+			.map((course) => ({
+				type: 'course',
+				title: 'Published Course Active',
+				description: `${course.title} is live with ${course.enrollments} enrolled learners`,
+				occurredAt: course.createdAt,
+			})),
+	]
+		.filter((event) => event.occurredAt)
+		.sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt))
+		.slice(0, 6);
+
+	const topCourse = coursePerformance[0] || null;
+	const creatorInsight = topCourse
+		? {
+				title: `${topCourse.title} leads your catalog`,
+				body: `${topCourse.enrollments} learners enrolled, ${topCourse.retentionRate}% course completion, and a ${topCourse.rating.toFixed(
+					1
+				)}/5 rating are making it your strongest performer right now.`,
+				ctaLabel: 'View Trends',
+		  }
+		: {
+				title: 'Build your first live course signal',
+				body: 'Publish a course and enroll learners to unlock live retention, activity, and performance insights here.',
+				ctaLabel: 'Create Course',
+		  };
+
+	return {
+		totalEnrollments,
+		pendingGrading,
+		avgRating,
+		totalCourses: courses.length,
+		avgAttendance,
+		recentEnrollments: recentEnrollments.map((enrollment) => ({
+			studentName: enrollment.userId?.name,
+			courseTitle: courseMap.get(enrollment.courseId.toString())?.title,
+			date: enrollment.enrolledAt,
+		})),
+		retentionData,
+		recentEvents,
+		topCourse,
+		coursePerformance,
+		creatorInsight,
+	};
 };

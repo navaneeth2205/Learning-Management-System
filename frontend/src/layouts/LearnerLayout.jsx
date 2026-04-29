@@ -271,7 +271,7 @@ export default function LearnerLayout() {
                                     <p className="text-sm font-black text-slate-900 leading-none hover:text-primary-600 transition-colors">{user?.name || 'Budiarti R'}</p>
                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Learner</p>
                                 </div>
-                                <Avatar name={user?.name || 'Budiarti R'} size="md" className="ring-2 ring-slate-50 shadow-sm" />
+                                <Avatar name={user?.name || 'Budiarti R'} src={user?.avatar} size="md" className="ring-2 ring-slate-50 shadow-sm" />
                             </div>
                             <button
                                 onClick={handleLogout}

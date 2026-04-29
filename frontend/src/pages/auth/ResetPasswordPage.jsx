@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { HiAcademicCap, HiArrowLeft, HiLockClosed } from 'react-icons/hi';
+import { HiAcademicCap, HiArrowLeft, HiLockClosed, HiMail } from 'react-icons/hi';
 import { resetPasswordApi } from '../../features/auth/authApi';
 import { ROUTES } from '../../constants/routes';
 import Button from '../../components/ui/Button';
@@ -11,8 +11,10 @@ export default function ResetPasswordPage() {
     const [params] = useSearchParams();
     const navigate = useNavigate();
 
-    const token = useMemo(() => params.get('token') || '', [params]);
+    const presetEmail = useMemo(() => params.get('email') || '', [params]);
 
+    const [email, setEmail] = useState(presetEmail);
+    const [otp, setOtp] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
@@ -21,8 +23,13 @@ export default function ResetPasswordPage() {
     const handleSubmit = async (event) => {
         event.preventDefault();
 
-        if (!token) {
-            setError('Reset token is missing from the link');
+        if (!email || !/\S+@\S+\.\S+/.test(email)) {
+            setError('Enter a valid email address');
+            return;
+        }
+
+        if (!/^\d{6}$/.test(otp)) {
+            setError('Enter the 6-digit OTP sent to your email');
             return;
         }
 
@@ -40,7 +47,7 @@ export default function ResetPasswordPage() {
         setLoading(true);
 
         try {
-            await resetPasswordApi({ token, password });
+            await resetPasswordApi({ email: email.trim(), otp: otp.trim(), password });
             toast.success('Password reset successful. Please login.');
             navigate(ROUTES.LOGIN, { replace: true });
         } catch (requestError) {
@@ -63,10 +70,30 @@ export default function ResetPasswordPage() {
 
                 <div className="bg-white rounded-2xl border border-surface-border shadow-card-lg p-8">
                     <h2 className="text-2xl font-bold text-text-primary mb-1">Reset password</h2>
-                    <p className="text-text-secondary text-sm mb-6">Enter a new password for your account.</p>
+                    <p className="text-text-secondary text-sm mb-6">Enter your email, the OTP from your inbox, and a new password.</p>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {error && <p className="text-sm text-red-600">{error}</p>}
+
+                        <Input
+                            label="Email address"
+                            type="email"
+                            placeholder="your@email.com"
+                            value={email}
+                            onChange={(event) => setEmail(event.target.value)}
+                            icon={<HiMail className="w-4 h-4" />}
+                            required
+                        />
+
+                        <Input
+                            label="OTP code"
+                            type="text"
+                            placeholder="6-digit code"
+                            value={otp}
+                            onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                            icon={<HiLockClosed className="w-4 h-4" />}
+                            required
+                        />
 
                         <Input
                             label="New password"

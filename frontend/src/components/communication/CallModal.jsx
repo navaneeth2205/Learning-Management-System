@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { HiPhoneMissedCall, HiMicrophone, HiVideoCamera, HiX, HiChevronDoubleRight, HiChevronDoubleLeft } from 'react-icons/hi';
+import { HiPhoneMissedCall, HiMicrophone, HiVideoCamera, HiX, HiChevronDoubleRight, HiChevronDoubleLeft, HiArrowsExpand } from 'react-icons/hi';
 import AgoraRTC from 'agora-rtc-sdk-ng';
 import { AGORA_APP_ID } from '../../config/agora';
 import { api } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+
+const formatCallDurationLabel = (durationSeconds = 0) => {
+    if (!durationSeconds || durationSeconds <= 0) return '0s';
+    if (durationSeconds < 60) return `${durationSeconds}s`;
+
+    const minutes = Math.floor(durationSeconds / 60);
+    const seconds = durationSeconds % 60;
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+};
 
 export default function CallModal({ channelName, isOpen, onClose, isVideo = true, calleeName = null, calleeId = null }) {
     const [localAudioTrack, setLocalAudioTrack] = useState(null);
@@ -15,22 +24,21 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
     const [isMinimized, setIsMinimized] = useState(false);
     const [isConnecting, setIsConnecting] = useState(false);
     const [connectionError, setConnectionError] = useState(null);
-    
+
     const remoteVideoRefs = useRef({});
-    // Keep refs to tracks so we can synchronously clean them up on unmount
     const tracksRef = useRef({ audio: null, video: null });
     const clientRef = useRef(null);
     const isJoiningRef = useRef(false);
     const joinedChannelRef = useRef(null);
     const effectRunIdRef = useRef(0);
-    const callStartTimeRef = useRef(null); // tracks when call connected
+    const callStartTimeRef = useRef(null);
 
     if (!clientRef.current) {
         clientRef.current = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
     }
 
-    // Use a callback ref for the local video
     const localVideoRef = useRef(null);
+    const containerRef = useRef(null);
     const setLocalVideoRef = (el) => {
         localVideoRef.current = el;
         if (el && tracksRef.current.video) {
@@ -38,8 +46,6 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
         }
     };
 
-    // We MUST use an effect to play the track when it becomes available,
-    // because the track is created async AFTER the DOM element mounts.
     useEffect(() => {
         if (localVideoTrack && localVideoRef.current) {
             localVideoTrack.play(localVideoRef.current);
@@ -92,8 +98,8 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
             client.on('user-published', async (user, mediaType) => {
                 await client.subscribe(user, mediaType);
                 if (mediaType === 'video') {
-                    setRemoteUsers(prev => {
-                        if (prev.find(u => u.uid === user.uid)) return prev;
+                    setRemoteUsers((prev) => {
+                        if (prev.find((entry) => entry.uid === user.uid)) return prev;
                         return [...prev, user];
                     });
                 }
@@ -103,11 +109,10 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
             });
 
             client.on('user-unpublished', (user) => {
-                setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+                setRemoteUsers((prev) => prev.filter((entry) => entry.uid !== user.uid));
             });
 
             try {
-                // Step 1: Request permissions and create local tracks FIRST
                 const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
                 if (!isMounted || effectRunIdRef.current !== runId) {
                     audioTrack.stop();
@@ -115,9 +120,10 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                     isJoiningRef.current = false;
                     return;
                 }
+
                 tracksRef.current.audio = audioTrack;
                 if (isMounted) setLocalAudioTrack(audioTrack);
-                
+
                 if (isVideo) {
                     const videoTrack = await AgoraRTC.createCameraVideoTrack();
                     if (!isMounted || effectRunIdRef.current !== runId) {
@@ -127,10 +133,10 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                         isJoiningRef.current = false;
                         return;
                     }
+
                     tracksRef.current.video = videoTrack;
                     if (isMounted) {
                         setLocalVideoTrack(videoTrack);
-                        // If the ref is already attached to DOM, play it
                         if (localVideoRef.current) {
                             videoTrack.play(localVideoRef.current);
                         }
@@ -148,7 +154,6 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
             }
 
             try {
-                // Step 2: Fetch a token from the backend
                 let token = null;
                 let appId = AGORA_APP_ID;
 
@@ -166,23 +171,22 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                     toast.error(`Backend Token Error: ${tokenErr?.response?.data?.message || tokenErr.message}`);
                 }
 
-                // Step 3: Join the channel
                 if (!isMounted || effectRunIdRef.current !== runId) {
                     cleanupTracks();
                     isJoiningRef.current = false;
                     return;
                 }
+
                 await client.join(appId, channelName, token, null);
                 joinedChannelRef.current = channelName;
 
-                // Step 4: Publish tracks
                 if (isMounted && effectRunIdRef.current === runId) {
                     if (isVideo && tracksRef.current.video) {
                         await client.publish([tracksRef.current.audio, tracksRef.current.video]);
                     } else if (tracksRef.current.audio) {
                         await client.publish([tracksRef.current.audio]);
                     }
-                    callStartTimeRef.current = Date.now(); // record call start time
+                    callStartTimeRef.current = Date.now();
                     setIsConnecting(false);
                     toast.success(isVideo ? 'Video call connected!' : 'Audio call connected!');
                 }
@@ -194,7 +198,7 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                 if (isMounted) {
                     setIsConnecting(false);
                     setConnectionError(error.message || 'Failed to connect to the call');
-                    toast.error('Connection failed: ' + error.message);
+                    toast.error(`Connection failed: ${error.message}`);
                 }
                 isJoiningRef.current = false;
             }
@@ -211,18 +215,22 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
             client.removeAllListeners();
             leaveClient();
         };
-    }, [isOpen, channelName, isVideo]);
+    }, [isOpen, channelName, isVideo, calleeId, calleeName]);
 
     useEffect(() => {
-        remoteUsers.forEach(user => {
-            if (user.videoTrack && remoteVideoRefs.current[user.uid]) {
-                user.videoTrack.play(remoteVideoRefs.current[user.uid]);
+        remoteUsers.forEach((remoteUser) => {
+            if (remoteUser.videoTrack && remoteVideoRefs.current[remoteUser.uid]) {
+                remoteUser.videoTrack.play(remoteVideoRefs.current[remoteUser.uid]);
             }
         });
     }, [remoteUsers]);
 
     const handleEndCall = async () => {
         const client = clientRef.current;
+        const durationSeconds = callStartTimeRef.current
+            ? Math.floor((Date.now() - callStartTimeRef.current) / 1000)
+            : 0;
+
         if (tracksRef.current.audio) {
             tracksRef.current.audio.stop();
             tracksRef.current.audio.close();
@@ -233,21 +241,20 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
             tracksRef.current.video.close();
             tracksRef.current.video = null;
         }
+
         setLocalAudioTrack(null);
         setLocalVideoTrack(null);
         setRemoteUsers([]);
         isJoiningRef.current = false;
         joinedChannelRef.current = null;
+
         if (client && client.connectionState !== 'DISCONNECTED') {
             await client.leave();
         }
 
-        // ── Report call duration to audit log ──
+        callStartTimeRef.current = null;
+
         try {
-            const durationSeconds = callStartTimeRef.current
-                ? Math.floor((Date.now() - callStartTimeRef.current) / 1000)
-                : 0;
-            callStartTimeRef.current = null;
             await api.post('/audit-logs/call-end', {
                 channelName,
                 calleeName: calleeName || null,
@@ -256,7 +263,20 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                 callType: isVideo ? 'video' : 'audio',
             });
         } catch {
-            // Non-critical — swallow silently
+        }
+
+        if (calleeId) {
+            try {
+                const callTypeLabel = isVideo ? 'Video' : 'Audio';
+                const durationLabel = formatCallDurationLabel(durationSeconds);
+
+                await api.post('/messages', {
+                    receiverId: calleeId,
+                    subject: `${callTypeLabel} call log`,
+                    content: `${callTypeLabel} call ended. Talked for ${durationLabel}.`,
+                });
+            } catch {
+            }
         }
 
         onClose();
@@ -270,141 +290,181 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
     };
 
     const toggleVideo = () => {
+        // If currently in audio-only call, offer to convert to video
+        if (!isVideo && !localVideoTrack) {
+            convertToVideo();
+            return;
+        }
+
         if (localVideoTrack) {
             localVideoTrack.setEnabled(isVideoOff);
             setIsVideoOff(!isVideoOff);
         }
     };
 
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    const toggleFullscreen = async () => {
+        const el = containerRef.current;
+        if (!el) return;
+        try {
+            if (!isFullscreen) {
+                if (el.requestFullscreen) await el.requestFullscreen();
+                else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+                else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+                setIsFullscreen(true);
+            } else {
+                if (document.exitFullscreen) await document.exitFullscreen();
+                else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+                else if (document.msExitFullscreen) await document.msExitFullscreen();
+                setIsFullscreen(false);
+            }
+        } catch (err) {
+            console.error('Fullscreen error', err);
+        }
+    };
+
+    const convertToVideo = async () => {
+        setIsConnecting(true);
+        try {
+            const videoTrack = await AgoraRTC.createCameraVideoTrack();
+            tracksRef.current.video = videoTrack;
+            setLocalVideoTrack(videoTrack);
+            if (localVideoRef.current) videoTrack.play(localVideoRef.current);
+
+            const client = clientRef.current;
+            if (client && client.connectionState !== 'DISCONNECTED') {
+                try {
+                    await client.publish([tracksRef.current.audio, tracksRef.current.video]);
+                    toast.success('Switched to video call');
+                } catch (pubErr) {
+                    console.error('Publish video error:', pubErr);
+                    toast.error('Could not publish video track');
+                }
+            }
+        } catch (err) {
+            console.error('Camera permission or creation failed:', err);
+            toast.error('Unable to access camera. Please allow camera permission.');
+        } finally {
+            setIsConnecting(false);
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
-        <div className={clsx(
-            "fixed z-[1000] transition-all duration-500 shadow-2xl overflow-hidden flex flex-col",
-            isMinimized 
-                ? "bottom-6 right-6 w-72 h-48 rounded-3xl" 
-                : "inset-6 md:inset-12 rounded-[40px] bg-slate-900"
+        <div ref={containerRef} className={clsx(
+            'fixed z-[1000] transition-all duration-500 shadow-2xl overflow-hidden flex flex-col',
+            isMinimized
+                ? 'bottom-6 right-6 w-72 h-48 rounded-3xl'
+                : 'inset-6 md:inset-12 rounded-[40px] bg-purple-900'
         )}>
-            {/* Header / Controls */}
             <div className="absolute top-6 right-6 z-10 flex gap-2">
-                <button 
+                <button
+                    onClick={toggleFullscreen}
+                    className="p-3 bg-white/15 hover:bg-white/25 text-white rounded-2xl backdrop-blur-md transition-all"
+                >
+                    <HiArrowsExpand />
+                </button>
+                <button
                     onClick={() => setIsMinimized(!isMinimized)}
-                    className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl backdrop-blur-md transition-all"
+                    className="p-3 bg-white/15 hover:bg-white/25 text-white rounded-2xl backdrop-blur-md transition-all"
                 >
                     {isMinimized ? <HiChevronDoubleLeft /> : <HiChevronDoubleRight />}
                 </button>
-                <button 
+                <button
                     onClick={handleEndCall}
-                    className="p-3 bg-rose-500/80 hover:bg-rose-600 text-white rounded-2xl backdrop-blur-md transition-all"
+                    className="p-3 bg-purple-600/80 hover:bg-purple-700 text-white rounded-2xl backdrop-blur-md transition-all"
                 >
                     <HiX />
                 </button>
             </div>
 
-            {/* Video Grid */}
-            <div className="flex-1 relative bg-slate-950 flex flex-wrap items-center justify-center p-4 gap-4">
-                {/* Connecting State */}
+            <div className="flex-1 relative bg-gradient-to-br from-purple-800 via-purple-900 to-purple-950 flex items-center justify-center p-4">
                 {isConnecting && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4 z-30 bg-slate-950">
-                        <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                        <p className="text-indigo-200/70 font-black uppercase tracking-[0.3em] text-[10px]">
-                            Connecting...
-                        </p>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4 z-30 bg-purple-950">
+                        <div className="w-16 h-16 border-4 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-purple-200 font-black uppercase tracking-[0.3em] text-[10px]">Connecting...</p>
                     </div>
                 )}
 
-                {/* Error State */}
                 {connectionError && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4 z-30 bg-slate-950">
-                        <HiPhoneMissedCall className="w-12 h-12 text-rose-400" />
-                        <p className="text-rose-300 font-bold text-sm max-w-xs">{connectionError}</p>
-                        <button 
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4 z-30 bg-purple-950">
+                        <HiPhoneMissedCall className="w-12 h-12 text-purple-300" />
+                        <p className="text-purple-200 font-bold text-sm max-w-xs">{connectionError}</p>
+                        <button
                             onClick={handleEndCall}
-                            className="px-6 py-2 bg-rose-500 text-white rounded-xl font-bold text-xs hover:bg-rose-600 transition-colors"
+                            className="px-6 py-2 bg-purple-600 text-white rounded-xl font-bold text-xs hover:bg-purple-700 transition-colors"
                         >
                             Close
                         </button>
                     </div>
                 )}
 
-                {/* Local Video */}
-                {!connectionError && (
-                    <div className={clsx(
-                        "relative overflow-hidden rounded-3xl bg-slate-800 border-2 border-white/10 shadow-lg",
-                        remoteUsers.length === 0 ? "w-full h-full" : "w-1/3 aspect-video absolute bottom-6 left-6 z-20"
-                    )}>
-                        <div ref={setLocalVideoRef} className="w-full h-full object-cover" />
-                        <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/40 backdrop-blur-md rounded-full text-[10px] text-white font-black uppercase tracking-widest">
-                            You {isVideoOff && "(Video Off)"}
+                {/* Main stage: remote (first) fills, otherwise local waiting view */}
+                <div className="relative w-full h-full max-h-[calc(100vh-160px)] overflow-hidden rounded-2xl">
+                    {remoteUsers.length > 0 ? (
+                        // show first remote as full stage
+                        <div className="absolute inset-0">
+                            <div ref={(el) => { const u = remoteUsers[0]; if (u && el) remoteVideoRefs.current[u.uid] = el; }} className="w-full h-full object-cover absolute inset-0" />
+                            <div className="absolute bottom-4 left-4 px-3 py-1 bg-purple-900/60 backdrop-blur-md rounded-full text-[12px] text-white font-semibold">
+                                {remoteUsers[0]?.name || `Peer ${remoteUsers[0]?.uid}`}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    ) : (
+                        <div className="absolute inset-0 flex items-center justify-center text-center">
+                            <div className="w-full h-full" ref={setLocalVideoRef} />
+                            <div className="absolute text-center">
+                                <div className="w-28 h-28 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <HiPhoneMissedCall className="w-10 h-10 text-purple-300" />
+                                </div>
+                                <p className="text-white font-semibold uppercase tracking-widest text-sm">Waiting for others to join...</p>
+                                <p className="text-purple-200 text-xs mt-1">Channel: {channelName}</p>
+                            </div>
+                        </div>
+                    )}
 
-                {/* Remote Videos */}
-                {remoteUsers.map((user, idx) => (
-                    <div 
-                        key={`${user.uid}-${idx}`} 
-                        className={clsx(
-                            "relative overflow-hidden rounded-3xl bg-slate-800 border-2 border-white/10 shadow-lg",
-                            remoteUsers.length === 1 ? "w-full h-full" : "w-[45%] aspect-video"
-                        )}
-                    >
-                        <div 
-                            ref={el => remoteVideoRefs.current[user.uid] = el} 
-                            className="w-full h-full object-cover" 
-                        />
-                        <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/40 backdrop-blur-md rounded-full text-[10px] text-white font-black uppercase tracking-widest">
-                            Peer ID: {user.uid}
+                    {/* Local preview when remote exists */}
+                    {remoteUsers.length > 0 && (
+                        <div className="absolute bottom-6 right-6 w-40 h-28 rounded-2xl overflow-hidden border-2 border-purple-400/40 shadow-card-lg bg-purple-950 z-30">
+                            <div ref={setLocalVideoRef} className="w-full h-full object-cover" />
+                            <div className="absolute top-2 left-2 px-2 py-0.5 bg-purple-900/60 backdrop-blur-md rounded-full text-[11px] text-white font-semibold">You</div>
                         </div>
-                    </div>
-                ))}
-
-                {!isConnecting && !connectionError && remoteUsers.length === 0 && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4">
-                        <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center animate-pulse">
-                            <HiPhoneMissedCall className="w-10 h-10 text-indigo-400" />
-                        </div>
-                        <p className="text-indigo-200/50 font-black uppercase tracking-[0.3em] text-[10px]">
-                            Waiting for others to join...
-                        </p>
-                        <p className="text-indigo-200/30 text-[10px] font-medium">
-                            Channel: {channelName}
-                        </p>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
-            {/* Bottom Controls Bar */}
             {!isMinimized && (
-                <div className="p-8 flex justify-center items-center gap-6 bg-gradient-to-t from-black/60 to-transparent">
-                    <button 
+                <div className="p-6 flex justify-center items-center gap-6 bg-gradient-to-t from-purple-950/80 to-transparent border-t border-purple-700/30">
+                    <button
                         onClick={toggleMute}
                         className={clsx(
-                            "w-16 h-16 rounded-3xl flex items-center justify-center transition-all shadow-xl",
-                            isMuted ? "bg-rose-500 text-white" : "bg-white/10 text-white hover:bg-white/20"
+                            'w-14 h-14 rounded-2xl flex items-center justify-center transition-all',
+                            isMuted ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/40' : 'bg-white/15 text-white hover:bg-white/25'
                         )}
                     >
-                        <HiMicrophone className={clsx("w-6 h-6", isMuted && "opacity-50")} />
+                        <HiMicrophone className={clsx('w-6 h-6', isMuted && 'opacity-50')} />
                     </button>
-                    
-                    <button 
+
+                    <button
                         onClick={handleEndCall}
-                        className="w-20 h-20 rounded-[32px] bg-rose-600 text-white flex items-center justify-center hover:bg-rose-700 hover:scale-110 active:scale-95 transition-all shadow-2xl shadow-rose-900/40"
+                        className="w-20 h-20 rounded-[32px] bg-purple-600 text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-purple-500/50"
                     >
                         <HiPhoneMissedCall className="w-8 h-8 rotate-[135deg]" />
                     </button>
 
-                    {isVideo && (
-                        <button 
-                            onClick={toggleVideo}
-                            className={clsx(
-                                "w-16 h-16 rounded-3xl flex items-center justify-center transition-all shadow-xl",
-                                isVideoOff ? "bg-rose-500 text-white" : "bg-white/10 text-white hover:bg-white/20"
-                            )}
-                        >
-                            <HiVideoCamera className={clsx("w-6 h-6", isVideoOff && "opacity-50")} />
-                        </button>
-                    )}
+                    <button
+                        onClick={toggleVideo}
+                        className={clsx(
+                            'w-14 h-14 rounded-2xl flex items-center justify-center transition-all',
+                            (isVideoOff || (!isVideo && localVideoTrack)) ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/40' : 'bg-white/15 text-white hover:bg-white/25'
+                        )}
+                    >
+                        <HiVideoCamera className={clsx('w-6 h-6', (isVideoOff || (!isVideo && localVideoTrack)) && 'opacity-60')} />
+                        {!isVideo && !localVideoTrack && (
+                            <span className="absolute -bottom-5 text-[10px] text-purple-300">Convert to Video</span>
+                        )}
+                    </button>
                 </div>
             )}
         </div>

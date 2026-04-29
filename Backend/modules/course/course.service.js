@@ -1,5 +1,6 @@
 import Course from './course.model.js';
 import Enrollment from '../enrollment/enrollment.model.js';
+import Progress from '../progress/progress.model.js';
 import { findLessonsByCourseId } from '../lesson/lesson.service.js';
 import { createNotificationsForUsers } from '../notification/notification.service.js';
 import { createGoogleClassroomCourse } from './googleClassroom.service.js';
@@ -201,4 +202,53 @@ export const createClassroomForInstructorCourse = async ({ courseId, instructorI
 		alreadyExists: false,
 		notifiedStudents: learnerIds.length,
 	};
+};
+
+export const submitCourseRating = async ({ courseId, userId, rating }) => {
+	const course = await Course.findById(courseId);
+	if (!course) {
+		throw createAppError('Course not found', 404);
+	}
+
+	const enrollment = await Enrollment.findOne({ courseId, userId });
+	if (!enrollment) {
+		throw createAppError('You must enroll before rating this course', 403);
+	}
+
+	const progress = await Progress.findOne({ courseId, userId });
+	if (!progress || Number(progress.completionPercentage || 0) < 100) {
+		throw createAppError('Complete this course before submitting a rating', 403);
+	}
+
+	const numericRating = Number(rating);
+	if (!Number.isFinite(numericRating) || numericRating < 1 || numericRating > 5) {
+		throw createAppError('Rating must be between 1 and 5', 400);
+	}
+
+	const existingRating = course.ratings.find((entry) => String(entry.userId) === String(userId));
+	if (existingRating) {
+		existingRating.value = numericRating;
+		existingRating.ratedAt = new Date();
+	} else {
+		course.ratings.push({
+			userId,
+			value: numericRating,
+			ratedAt: new Date(),
+		});
+	}
+
+	const ratingTotal = course.ratings.reduce((sum, entry) => sum + Number(entry.value || 0), 0);
+	course.reviewCount = course.ratings.length;
+	course.rating = course.reviewCount > 0 ? Number((ratingTotal / course.reviewCount).toFixed(1)) : 0;
+	await course.save();
+
+	await logEvent({
+		type: 'mod',
+		event: `Course rated: "${course.title}" - ${numericRating}/5`,
+		userId,
+		severity: 'low',
+		meta: { courseId, rating: numericRating },
+	});
+
+	return Course.findById(courseId).populate('instructorId', 'name email role');
 };

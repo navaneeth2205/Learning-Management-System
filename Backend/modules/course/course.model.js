@@ -58,6 +58,28 @@ const courseSchema = new mongoose.Schema(
 			type: Number,
 			default: 0,
 		},
+		ratings: {
+			type: [
+				{
+					userId: {
+						type: mongoose.Schema.Types.ObjectId,
+						ref: 'User',
+						required: true,
+					},
+					value: {
+						type: Number,
+						required: true,
+						min: 1,
+						max: 5,
+					},
+					ratedAt: {
+						type: Date,
+						default: Date.now,
+					},
+				},
+			],
+			default: [],
+		},
 		googleClassroom: {
 			id: {
 				type: String,

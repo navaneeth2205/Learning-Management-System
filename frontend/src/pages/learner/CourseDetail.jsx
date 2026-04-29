@@ -11,7 +11,7 @@ import Badge from '../../components/ui/Badge';
 import Tabs from '../../components/ui/Tabs';
 import Avatar from '../../components/ui/Avatar';
 import ProgressBar from '../../components/ui/ProgressBar';
-import { fetchCourseDetails, enrollInCourse, checkEnrollment, sendMessageAPI, fetchMessageAccessStatus, requestMessageAccess, fetchMyProgress, fetchQuizzesByCourse } from '../../services/learnerApi';
+import { fetchCourseDetails, enrollInCourse, checkEnrollment, sendMessageAPI, fetchMessageAccessStatus, requestMessageAccess, fetchMyProgress, fetchQuizzesByCourse, submitCourseRating } from '../../services/learnerApi';
 import CallModal from '../../components/communication/CallModal';
 import { useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
@@ -31,6 +31,10 @@ export default function CourseDetail() {
     const [messageText, setMessageText] = useState('');
     const [accessStatus, setAccessStatus] = useState('none');
     const [requestingAccess, setRequestingAccess] = useState(false);
+    const [currentProgress, setCurrentProgress] = useState(0);
+    const [showRatingModal, setShowRatingModal] = useState(false);
+    const [selectedRating, setSelectedRating] = useState(0);
+    const [submittingRating, setSubmittingRating] = useState(false);
 
     const getInstructorId = (value) => {
         if (!value) return null;
@@ -66,6 +70,7 @@ export default function CourseDetail() {
                     if (myProgress && myProgress.completedLessons) {
                         setCompletedLessons(new Set(myProgress.completedLessons.map(id => String(id))));
                     }
+                    setCurrentProgress(Number(myProgress?.completionPercentage) || 0);
                 }
             })
             .catch(() => {});
@@ -168,6 +173,28 @@ export default function CourseDetail() {
         }
     };
 
+    const handleSubmitRating = async () => {
+        if (selectedRating < 1) {
+            toast.error('Please choose a rating first');
+            return;
+        }
+
+        try {
+            setSubmittingRating(true);
+            const updatedCourse = await submitCourseRating(courseId, selectedRating);
+            setCourse((prev) => ({
+                ...(prev || {}),
+                ...(updatedCourse || {}),
+            }));
+            setShowRatingModal(false);
+            toast.success('Thanks for rating this course');
+        } catch (err) {
+            toast.error(err.message || 'Failed to submit rating');
+        } finally {
+            setSubmittingRating(false);
+        }
+    };
+
     const c = course || {};
     const classroom = c.googleClassroom || {};
     const instructorName = c.instructorId?.name || 'Instructor';
@@ -223,6 +250,7 @@ export default function CourseDetail() {
         const lessonCompleted = completedLessons.has(String(lesson._id || lesson.id));
         return !lessonCompleted || !areLessonQuizzesPassed(lesson.order);
     });
+    const isCourseCompleted = enrolled && currentProgress >= 100;
 
     const tabs = [
         { key: 'curriculum', label: 'Curriculum', icon: <HiAcademicCap /> },
@@ -276,6 +304,12 @@ export default function CourseDetail() {
                                     <HiUserGroup className="text-primary-600" />
                                     <span>{c.enrolledCount || c.enrolled || 0} students enrolled</span>
                                 </div>
+                                {isCourseCompleted && (
+                                    <div className="flex items-center gap-2 text-emerald-700 text-sm font-semibold">
+                                        <HiCheckCircle className="text-emerald-500" />
+                                        <span>Course completed. Share your rating.</span>
+                                    </div>
+                                )}
                                 <div className="flex items-center gap-2 text-text-secondary text-sm">
                                     <Avatar name={instructorName} size="xs" />
                                     <span>Created by <span className="font-semibold text-text-primary">{instructorName}</span></span>
@@ -320,6 +354,16 @@ export default function CourseDetail() {
                                                             onClick={() => window.open(classroom.alternateLink, '_blank', 'noopener,noreferrer')}
                                                         >
                                                             <HiExternalLink className="mr-2" /> Join Google Classroom
+                                                        </Button>
+                                                    )}
+                                                    {isCourseCompleted && (
+                                                        <Button
+                                                            fullWidth
+                                                            variant="outline"
+                                                            className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                                                            onClick={() => setShowRatingModal(true)}
+                                                        >
+                                                            Give Rating
                                                         </Button>
                                                     )}
                                                 </div>
@@ -617,8 +661,68 @@ export default function CourseDetail() {
                 isOpen={callConfig.isOpen}
                 channelName={callConfig.channel}
                 isVideo={callConfig.isVideo}
+                calleeId={getInstructorId(course?.instructorId)}
+                calleeName={course?.instructorId?.name || course?.instructorName || 'Instructor'}
                 onClose={() => setCallConfig({ ...callConfig, isOpen: false })}
             />
+            {showRatingModal && (
+                <div className="fixed inset-0 z-50 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center px-4">
+                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-[0.25em] text-amber-500">Course Completed</p>
+                                <h3 className="mt-2 text-2xl font-black text-slate-900">Rate this course</h3>
+                                <p className="mt-2 text-sm text-slate-600">
+                                    Your rating will update the live score for <span className="font-bold">{c.title}</span>.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                className="text-slate-400 hover:text-slate-700 text-xl leading-none"
+                                onClick={() => setShowRatingModal(false)}
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="mt-6 flex items-center justify-center gap-2">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                    key={star}
+                                    type="button"
+                                    onClick={() => setSelectedRating(star)}
+                                    className="transition-transform hover:scale-110"
+                                >
+                                    <HiStar className={`w-10 h-10 ${star <= selectedRating ? 'text-amber-400' : 'text-slate-300'}`} />
+                                </button>
+                            ))}
+                        </div>
+
+                        <p className="mt-4 text-center text-sm font-semibold text-slate-600">
+                            {selectedRating > 0 ? `${selectedRating} out of 5` : 'Choose 1 to 5 stars'}
+                        </p>
+
+                        <div className="mt-6 flex gap-3">
+                            <Button
+                                fullWidth
+                                variant="outline"
+                                className="border-slate-200 text-slate-600"
+                                onClick={() => setShowRatingModal(false)}
+                            >
+                                Later
+                            </Button>
+                            <Button
+                                fullWidth
+                                className="bg-amber-500 hover:bg-amber-600 text-white border-none"
+                                onClick={handleSubmitRating}
+                                disabled={submittingRating}
+                            >
+                                {submittingRating ? 'Saving...' : 'Submit Rating'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

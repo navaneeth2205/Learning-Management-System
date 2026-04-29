@@ -42,7 +42,10 @@ export const forgotPasswordValidation = [
 ];
 
 export const resetPasswordValidation = [
-  body('token').trim().notEmpty().withMessage('Reset token is required'),
+  body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
+  body('otp')
+    .matches(/^\d{6}$/)
+    .withMessage('OTP must be a 6-digit code'),
   body('password')
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters long'),

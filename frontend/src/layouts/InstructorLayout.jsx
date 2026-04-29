@@ -168,7 +168,7 @@ export default function InstructorLayout() {
                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Instructor</p>
                                 </div>
                                 <div className="relative">
-                                    <Avatar name={user?.name || 'Dr. Sarah'} size="md" className="ring-2 ring-slate-50 shadow-sm group-hover:ring-purple-200 transition-all" />
+                                    <Avatar name={user?.name || 'Dr. Sarah'} src={user?.avatar} size="md" className="ring-2 ring-slate-50 shadow-sm group-hover:ring-purple-200 transition-all" />
                                     <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-violet-500 border-2 border-white rounded-full animate-pulse" />
                                 </div>
                             </div>

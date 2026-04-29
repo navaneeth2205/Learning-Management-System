@@ -11,6 +11,7 @@ import {
 	updateCourseController,
 	deleteCourseController,
 	createCourseClassroomController,
+	submitCourseRatingController,
 } from './course.controller.js';
 
 import { uploadThumbnail } from '../../middleware/upload.middleware.js';
@@ -22,6 +23,7 @@ router.get('/', getAllCoursesController);
 router.get('/admin/all', authenticate, isAdmin, getAllCoursesController);
 router.get('/instructor/me', authenticate, isInstructorOrAdmin, getInstructorCoursesController);
 router.post('/:courseId/classroom', authenticate, isInstructorOrAdmin, createCourseClassroomController);
+router.patch('/:courseId/rating', authenticate, submitCourseRatingController);
 router.get('/:courseId', getSingleCourseController);
 router.get('/:courseId/details', getCourseDetailController);
 router.put('/:courseId', authenticate, isInstructorOrAdmin, updateCourseController);

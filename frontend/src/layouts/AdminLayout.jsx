@@ -179,7 +179,7 @@ export default function AdminLayout() {
                                     <p className="text-sm font-black text-slate-900 leading-none group-hover:text-[#6d28d9] transition-colors">{user?.name || 'Administrator'}</p>
                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Root Admin</p>
                                 </div>
-                                <Avatar name={user?.name || 'Administrator'} size="md" className="ring-2 ring-slate-50 shadow-sm" />
+                                <Avatar name={user?.name || 'Administrator'} src={user?.avatar} size="md" className="ring-2 ring-slate-50 shadow-sm" />
                             </div>
                             <button onClick={handleLogout} className="p-2.5 rounded-xl border border-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-500 transition-all font-bold text-xs ml-2 uppercase">
                                 Sign Out

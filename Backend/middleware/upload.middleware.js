@@ -57,3 +57,8 @@ export const uploadThumbnail = createUploader({
 	folder: 'thumbnails',
 	allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'],
 });
+
+export const uploadAvatar = createUploader({
+	folder: 'avatars',
+	allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'],
+});

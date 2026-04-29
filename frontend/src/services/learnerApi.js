@@ -6,6 +6,7 @@ const unwrap = (response) => response.data?.data;
 export const fetchCourses = (params = {}) => api.get('/courses', { params }).then(unwrap);
 export const fetchCourseById = (courseId) => api.get(`/courses/${courseId}`).then(unwrap);
 export const fetchCourseDetails = (courseId) => api.get(`/courses/${courseId}/details`).then(unwrap);
+export const submitCourseRating = (courseId, rating) => api.patch(`/courses/${courseId}/rating`, { rating }).then(unwrap);
 
 // ── Enrollments ──
 export const enrollInCourse = (courseId) => api.post('/enrollments', { courseId }).then(unwrap);
@@ -121,6 +122,13 @@ export const fetchAdminUsers = (params = {}) => api.get('/users', { params }).th
 export const updateAdminUserRole = (userId, role) => api.patch(`/users/${userId}/role`, { role }).then(unwrap);
 export const fetchAdminCourses = () => api.get('/courses/admin/all').then(unwrap);
 export const updateAdminCourse = (courseId, payload) => api.put(`/courses/${courseId}`, payload).then(unwrap);
+export const fetchMyProfile = () => api.get('/users/me').then(unwrap);
+export const updateMyProfile = (payload) => api.patch('/users/me', payload).then(unwrap);
+export const updateMyAvatar = (formData) =>
+    api.patch('/users/me/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(unwrap);
+export const updateMyPassword = (payload) => api.patch('/users/me/password', payload).then(unwrap);
 
 // ── Dashboard Stats (for ProgressDashboard) ──
 export const fetchDashboardStats = () => api.get('/dashboard/stats').then(unwrap);

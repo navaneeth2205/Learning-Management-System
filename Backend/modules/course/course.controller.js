@@ -10,6 +10,7 @@ import {
 	deleteCourse,
 	getAllCoursesUnfiltered,
 	createClassroomForInstructorCourse,
+	submitCourseRating,
 } from './course.service.js';
 
 export const createCourseController = async (req, res, next) => {
@@ -123,6 +124,23 @@ export const createCourseClassroomController = async (req, res, next) => {
 				alreadyExists: result.alreadyExists,
 				notifiedStudents: result.notifiedStudents,
 			},
+		});
+	} catch (error) {
+		return next(error);
+	}
+};
+
+export const submitCourseRatingController = async (req, res, next) => {
+	try {
+		const course = await submitCourseRating({
+			courseId: req.params.courseId,
+			userId: req.user._id,
+			rating: req.body.rating,
+		});
+
+		return successResponse(res, {
+			message: 'Course rating submitted successfully',
+			data: course,
 		});
 	} catch (error) {
 		return next(error);

@@ -122,6 +122,7 @@ export default function CallManager() {
             channelName: incomingCall.channelName,
             isVideo: incomingCall.isVideo,
             otherUserId: incomingCall.callerId,
+            otherUserName: incomingCall.callerName,
         });
         setIncomingCall(null);
         window.setTimeout(() => {
@@ -220,6 +221,8 @@ export default function CallManager() {
                     isOpen={true}
                     channelName={activeCall.channelName}
                     isVideo={activeCall.isVideo}
+                    calleeId={activeCall.otherUserId}
+                    calleeName={activeCall.otherUserName || null}
                     onClose={handleEndActiveCall}
                 />
             )}

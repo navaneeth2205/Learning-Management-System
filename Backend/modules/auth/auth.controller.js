@@ -94,7 +94,7 @@ export const requestPasswordReset = async (req, res, next) => {
 		const data = await forgotPassword(req.body);
 		return successResponse(res, {
 			statusCode: 200,
-			message: 'Password reset link sent if the account exists',
+			message: 'Password reset OTP sent if the account exists',
 			data,
 		});
 	} catch (error) {

@@ -11,7 +11,7 @@ import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
-import { fetchInbox, fetchSentMessages, sendMessageAPI, fetchMessageAccessStatus, requestMessageAccess } from '../../services/learnerApi';
+import { fetchInbox, fetchSentMessages, sendMessageAPI, fetchMessageAccessStatus, markMessageAsRead, requestMessageAccess } from '../../services/learnerApi';
 import CallModal from '../../components/communication/CallModal';
 import { useSelector } from 'react-redux';
 import { useSocket } from '../../context/SocketContext';
@@ -28,6 +28,7 @@ export default function MessageInbox() {
     const location = useLocation();
     const { socket, onlineUsers } = useSocket();
     const recognitionRef = useRef(null);
+    const readSyncRef = useRef(new Set());
     const currentUserId = String(user?._id || user?.id || '');
     const [selectedId, setSelectedId] = useState(null);
     const [inputText, setInputText] = useState('');
@@ -138,9 +139,11 @@ export default function MessageInbox() {
             const thread = history.get(chatId) || [];
             thread.push({
                 id: msg._id || msg.id || `${chatId}-${thread.length}`,
+                messageId: msg._id || msg.id || null,
                 text: msg.content,
                 type: isOutgoing ? 'sent' : 'received',
                 time: time || 'Now',
+                read: Boolean(msg.read),
             });
             history.set(chatId, thread);
         });
@@ -303,6 +306,32 @@ export default function MessageInbox() {
             );
         });
     }, [activeMessages.length, selectedId]);
+
+    useEffect(() => {
+        if (!selectedId || !activeMessages.length) return;
+
+        const unreadReceived = activeMessages.filter(
+            (message) => message.type === 'received' && !message.read && message.messageId
+        );
+
+        if (!unreadReceived.length) return;
+
+        const pendingMessageIds = unreadReceived
+            .map((message) => String(message.messageId))
+            .filter((messageId) => !readSyncRef.current.has(messageId));
+
+        if (!pendingMessageIds.length) return;
+
+        pendingMessageIds.forEach((messageId) => readSyncRef.current.add(messageId));
+
+        Promise.all(pendingMessageIds.map((messageId) => markMessageAsRead(messageId).catch(() => null)))
+            .then(() => {
+                loadMessages({ keepSelection: true });
+            })
+            .finally(() => {
+                pendingMessageIds.forEach((messageId) => readSyncRef.current.delete(messageId));
+            });
+    }, [activeMessages, selectedId]);
 
     const handleSend = () => {
         if (!inputText.trim()) return;
@@ -772,6 +801,8 @@ export default function MessageInbox() {
                 isOpen={callConfig.isOpen}
                 channelName={callConfig.channel}
                 isVideo={callConfig.isVideo}
+                calleeName={activeChat?.name || null}
+                calleeId={activeChat?.receiverId || activeChat?.id || null}
                 onClose={() => {
                     const peerId = activeChat?.receiverId || activeChat?.id;
                     if (socket && peerId) {

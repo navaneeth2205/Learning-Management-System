@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { HiAcademicCap, HiMail, HiArrowLeft } from 'react-icons/hi';
 import { forgotPasswordApi } from '../../features/auth/authApi';
@@ -8,6 +8,7 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 
 export default function ForgotPasswordPage() {
+    const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [error, setError] = useState('');
     const [sent, setSent] = useState(false);
@@ -24,10 +25,10 @@ export default function ForgotPasswordPage() {
         try {
             await forgotPasswordApi({ email: email.trim() });
             setSent(true);
-            toast.success('Reset link sent if your account exists');
+            toast.success('Password reset OTP sent if your account exists');
         } catch (requestError) {
-            setError(requestError.message || 'Unable to send reset link');
-            toast.error(requestError.message || 'Unable to send reset link');
+            setError(requestError.message || 'Unable to send password reset OTP');
+            toast.error(requestError.message || 'Unable to send password reset OTP');
         } finally {
             setLoading(false);
         }
@@ -49,20 +50,25 @@ export default function ForgotPasswordPage() {
                                 <HiMail className="w-8 h-8 text-emerald-600" />
                             </div>
                             <h3 className="text-xl font-bold text-text-primary mb-2">Check your inbox</h3>
-                            <p className="text-text-secondary text-sm mb-6">We sent a password reset link to <strong>{email}</strong>. It will expire in 15 minutes.</p>
-                            <Link to={ROUTES.LOGIN} className="text-primary-600 hover:text-primary-700 font-medium text-sm flex items-center justify-center gap-1">
-                                <HiArrowLeft className="w-4 h-4" /> Back to login
-                            </Link>
+                            <p className="text-text-secondary text-sm mb-6">We sent a 6-digit password reset OTP to <strong>{email}</strong>. It expires in 15 minutes.</p>
+                            <div className="space-y-3">
+                                <Button type="button" fullWidth size="lg" onClick={() => navigate(`${ROUTES.RESET_PASSWORD}?email=${encodeURIComponent(email.trim())}`)}>
+                                    Continue With OTP
+                                </Button>
+                                <Link to={ROUTES.LOGIN} className="text-primary-600 hover:text-primary-700 font-medium text-sm flex items-center justify-center gap-1">
+                                    <HiArrowLeft className="w-4 h-4" /> Back to login
+                                </Link>
+                            </div>
                         </div>
                     ) : (
                         <>
                             <h2 className="text-2xl font-bold text-text-primary mb-1">Forgot password?</h2>
-                            <p className="text-text-secondary text-sm mb-6">Enter your email address and we'll send you a reset link.</p>
+                            <p className="text-text-secondary text-sm mb-6">Enter your email address and we'll send you a 6-digit OTP.</p>
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 <Input label="Email address" type="email" placeholder="your@email.com"
                                     value={email} onChange={e => { setEmail(e.target.value); setError(''); }}
                                     icon={<HiMail className="w-4 h-4" />} error={error} required />
-                                <Button type="submit" fullWidth loading={loading} size="lg">Send Reset Link</Button>
+                                <Button type="submit" fullWidth loading={loading} size="lg">Send OTP</Button>
                             </form>
                             <div className="mt-5 text-center">
                                 <Link to={ROUTES.LOGIN} className="text-sm text-text-secondary hover:text-text-primary flex items-center justify-center gap-1">

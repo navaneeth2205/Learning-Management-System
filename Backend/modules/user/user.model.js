@@ -16,6 +16,26 @@ const userSchema = new mongoose.Schema(
 			lowercase: true,
 			trim: true,
 		},
+		avatar: {
+			type: String,
+			trim: true,
+			default: '',
+		},
+		bio: {
+			type: String,
+			trim: true,
+			default: '',
+		},
+		focus: {
+			type: String,
+			trim: true,
+			default: '',
+		},
+		timezone: {
+			type: String,
+			trim: true,
+			default: '',
+		},
 		password: {
 			type: String,
 			required: false,

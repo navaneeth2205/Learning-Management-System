@@ -27,6 +27,10 @@ const buildAuthPayload = (user) => {
 			id: user._id,
 			name: user.name,
 			email: user.email,
+			avatar: user.avatar || '',
+			bio: user.bio || '',
+			focus: user.focus || '',
+			timezone: user.timezone || '',
 			role: user.role,
 			createdAt: user.createdAt,
 		},
@@ -82,24 +86,21 @@ const sendRegistrationOtpEmail = async ({ email, name, otp }) => {
 	});
 };
 
-const sendResetPasswordEmail = async ({ email, name, resetToken }) => {
+const sendResetPasswordEmail = async ({ email, name, otp }) => {
 	const transporter = getMailerTransporter();
-	const clientBaseUrl = env.clientUrl === '*' ? 'http://127.0.0.1:5173' : env.clientUrl;
-	const resetUrl = `${clientBaseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
 	await transporter.sendMail({
 		from: env.defaultFromEmail,
 		to: email,
-		subject: 'EduVerse password reset',
-		text: `Hello ${name}, reset your password using this link: ${resetUrl}. The link expires in ${env.resetPasswordExpiresMinutes} minutes.`,
+		subject: 'EduVerse password reset OTP',
+		text: `Hello ${name}, your EduVerse password reset OTP is ${otp}. It will expire in ${env.resetPasswordExpiresMinutes} minutes.`,
 		html: `
 			<div style="font-family: Arial, sans-serif; line-height:1.5; color:#111827;">
 				<h2 style="margin-bottom:8px;">Reset your EduVerse password</h2>
 				<p>Hello ${name},</p>
-				<p>Click the button below to reset your password. This link expires in ${env.resetPasswordExpiresMinutes} minutes.</p>
-				<p style="margin:24px 0;">
-					<a href="${resetUrl}" style="background:#4f46e5;color:white;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Reset password</a>
-				</p>
+				<p>Your password reset OTP is:</p>
+				<div style="font-size:28px; font-weight:700; letter-spacing:6px; margin:16px 0; color:#4f46e5;">${otp}</div>
+				<p>This code expires in ${env.resetPasswordExpiresMinutes} minutes.</p>
 				<p>If you did not request this, you can ignore this email.</p>
 			</div>
 		`,
@@ -399,8 +400,8 @@ export const forgotPassword = async ({ email }) => {
 		return { email: normalizedEmail, sent: true };
 	}
 
-	const resetToken = crypto.randomBytes(32).toString('hex');
-	const resetTokenHash = hashOtp(resetToken);
+	const otp = generateOtp();
+	const resetTokenHash = hashOtp(otp);
 
 	user.resetPasswordTokenHash = resetTokenHash;
 	user.resetPasswordExpiresAt = new Date(Date.now() + env.resetPasswordExpiresMinutes * 60 * 1000);
@@ -409,21 +410,28 @@ export const forgotPassword = async ({ email }) => {
 	await sendResetPasswordEmail({
 		email: user.email,
 		name: user.name,
-		resetToken,
+		otp,
 	});
 
-	return { email: user.email, sent: true };
+	return {
+		email: user.email,
+		sent: true,
+		requiresOtp: true,
+		otpExpiresInMinutes: env.resetPasswordExpiresMinutes,
+	};
 };
 
-export const resetPassword = async ({ token, password }) => {
-	const tokenHash = hashOtp(String(token));
+export const resetPassword = async ({ email, otp, password }) => {
+	const normalizedEmail = normalizeEmail(email);
+	const tokenHash = hashOtp(String(otp));
 	const user = await User.findOne({
+		email: normalizedEmail,
 		resetPasswordTokenHash: tokenHash,
 		resetPasswordExpiresAt: { $gt: new Date() },
 	}).select('+password +resetPasswordTokenHash +resetPasswordExpiresAt');
 
 	if (!user) {
-		throw createAppError('Reset token is invalid or expired', 400);
+		throw createAppError('Password reset OTP is invalid or expired', 400);
 	}
 
 	user.password = await hashPassword(password);
