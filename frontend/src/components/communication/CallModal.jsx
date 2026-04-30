@@ -33,8 +33,13 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
     const effectRunIdRef = useRef(0);
     const callStartTimeRef = useRef(null);
 
-    if (!clientRef.current) {
-        clientRef.current = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+    // Initialize Agora client once
+    if (clientRef.current === null) {
+        try {
+            clientRef.current = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+        } catch (err) {
+            console.error('Failed to create Agora client:', err);
+        }
     }
 
     const localVideoRef = useRef(null);
@@ -262,7 +267,8 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                 durationSeconds,
                 callType: isVideo ? 'video' : 'audio',
             });
-        } catch {
+        } catch (err) {
+            console.warn('Failed to log call end:', err);
         }
 
         if (calleeId) {
@@ -275,7 +281,8 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                     subject: `${callTypeLabel} call log`,
                     content: `${callTypeLabel} call ended. Talked for ${durationLabel}.`,
                 });
-            } catch {
+            } catch (err) {
+                console.warn('Failed to send call log message:', err);
             }
         }
 
@@ -350,14 +357,12 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
         }
     };
 
-    if (!isOpen) return null;
-
     return (
         <div ref={containerRef} className={clsx(
             'fixed z-[1000] transition-all duration-500 shadow-2xl overflow-hidden flex flex-col',
             isMinimized
                 ? 'bottom-6 right-6 w-72 h-48 rounded-3xl'
-                : 'inset-6 md:inset-12 rounded-[40px] bg-purple-900'
+                : 'inset-6 md:inset-12 rounded-[40px] bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900'
         )}>
             <div className="absolute top-6 right-6 z-10 flex gap-2">
                 <button
@@ -374,27 +379,27 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                 </button>
                 <button
                     onClick={handleEndCall}
-                    className="p-3 bg-purple-600/80 hover:bg-purple-700 text-white rounded-2xl backdrop-blur-md transition-all"
+                    className="p-3 bg-rose-500/80 hover:bg-rose-600 text-white rounded-2xl backdrop-blur-md transition-all"
                 >
                     <HiX />
                 </button>
             </div>
 
-            <div className="flex-1 relative bg-gradient-to-br from-purple-800 via-purple-900 to-purple-950 flex items-center justify-center p-4">
+            <div className="flex-1 relative bg-gradient-to-br from-primary-700 via-primary-800 to-primary-950 flex items-center justify-center p-4">
                 {isConnecting && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4 z-30 bg-purple-950">
-                        <div className="w-16 h-16 border-4 border-purple-400 border-t-transparent rounded-full animate-spin" />
-                        <p className="text-purple-200 font-black uppercase tracking-[0.3em] text-[10px]">Connecting...</p>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4 z-30 bg-primary-950/90 backdrop-blur-sm">
+                        <div className="w-16 h-16 border-4 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-primary-200 font-black uppercase tracking-[0.3em] text-[10px]">Connecting...</p>
                     </div>
                 )}
 
                 {connectionError && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4 z-30 bg-purple-950">
-                        <HiPhoneMissedCall className="w-12 h-12 text-purple-300" />
-                        <p className="text-purple-200 font-bold text-sm max-w-xs">{connectionError}</p>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center space-y-4 z-30 bg-primary-950/90 backdrop-blur-sm">
+                        <HiPhoneMissedCall className="w-12 h-12 text-primary-300" />
+                        <p className="text-primary-200 font-bold text-sm max-w-xs">{connectionError}</p>
                         <button
                             onClick={handleEndCall}
-                            className="px-6 py-2 bg-purple-600 text-white rounded-xl font-bold text-xs hover:bg-purple-700 transition-colors"
+                            className="px-6 py-2 bg-primary-600 text-white rounded-xl font-bold text-xs hover:bg-primary-700 transition-colors"
                         >
                             Close
                         </button>
@@ -407,7 +412,7 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                         // show first remote as full stage
                         <div className="absolute inset-0">
                             <div ref={(el) => { const u = remoteUsers[0]; if (u && el) remoteVideoRefs.current[u.uid] = el; }} className="w-full h-full object-cover absolute inset-0" />
-                            <div className="absolute bottom-4 left-4 px-3 py-1 bg-purple-900/60 backdrop-blur-md rounded-full text-[12px] text-white font-semibold">
+                            <div className="absolute bottom-4 left-4 px-3 py-1 bg-primary-900/60 backdrop-blur-md rounded-full text-[12px] text-white font-semibold">
                                 {remoteUsers[0]?.name || `Peer ${remoteUsers[0]?.uid}`}
                             </div>
                         </div>
@@ -415,32 +420,32 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                         <div className="absolute inset-0 flex items-center justify-center text-center">
                             <div className="w-full h-full" ref={setLocalVideoRef} />
                             <div className="absolute text-center">
-                                <div className="w-28 h-28 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <HiPhoneMissedCall className="w-10 h-10 text-purple-300" />
+                                <div className="w-28 h-28 bg-primary-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <HiPhoneMissedCall className="w-10 h-10 text-primary-300" />
                                 </div>
                                 <p className="text-white font-semibold uppercase tracking-widest text-sm">Waiting for others to join...</p>
-                                <p className="text-purple-200 text-xs mt-1">Channel: {channelName}</p>
+                                <p className="text-primary-200 text-xs mt-1">Channel: {channelName}</p>
                             </div>
                         </div>
                     )}
 
                     {/* Local preview when remote exists */}
                     {remoteUsers.length > 0 && (
-                        <div className="absolute bottom-6 right-6 w-40 h-28 rounded-2xl overflow-hidden border-2 border-purple-400/40 shadow-card-lg bg-purple-950 z-30">
+                        <div className="absolute bottom-6 right-6 w-40 h-28 rounded-2xl overflow-hidden border-2 border-primary-400/40 shadow-card-lg bg-primary-950 z-30">
                             <div ref={setLocalVideoRef} className="w-full h-full object-cover" />
-                            <div className="absolute top-2 left-2 px-2 py-0.5 bg-purple-900/60 backdrop-blur-md rounded-full text-[11px] text-white font-semibold">You</div>
+                            <div className="absolute top-2 left-2 px-2 py-0.5 bg-primary-900/60 backdrop-blur-md rounded-full text-[11px] text-white font-semibold">You</div>
                         </div>
                     )}
                 </div>
             </div>
 
             {!isMinimized && (
-                <div className="p-6 flex justify-center items-center gap-6 bg-gradient-to-t from-purple-950/80 to-transparent border-t border-purple-700/30">
+                <div className="p-6 flex justify-center items-center gap-6 bg-gradient-to-t from-primary-950/80 to-transparent border-t border-primary-700/30">
                     <button
                         onClick={toggleMute}
                         className={clsx(
                             'w-14 h-14 rounded-2xl flex items-center justify-center transition-all',
-                            isMuted ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/40' : 'bg-white/15 text-white hover:bg-white/25'
+                            isMuted ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/40' : 'bg-white/15 text-white hover:bg-white/25'
                         )}
                     >
                         <HiMicrophone className={clsx('w-6 h-6', isMuted && 'opacity-50')} />
@@ -448,7 +453,7 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
 
                     <button
                         onClick={handleEndCall}
-                        className="w-20 h-20 rounded-[32px] bg-purple-600 text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-purple-500/50"
+                        className="w-20 h-20 rounded-[32px] bg-gradient-to-br from-rose-500 to-rose-600 text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-rose-500/50"
                     >
                         <HiPhoneMissedCall className="w-8 h-8 rotate-[135deg]" />
                     </button>
@@ -457,12 +462,12 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
                         onClick={toggleVideo}
                         className={clsx(
                             'w-14 h-14 rounded-2xl flex items-center justify-center transition-all',
-                            (isVideoOff || (!isVideo && localVideoTrack)) ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/40' : 'bg-white/15 text-white hover:bg-white/25'
+                            (isVideoOff || (!isVideo && localVideoTrack)) ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/40' : 'bg-white/15 text-white hover:bg-white/25'
                         )}
                     >
                         <HiVideoCamera className={clsx('w-6 h-6', (isVideoOff || (!isVideo && localVideoTrack)) && 'opacity-60')} />
                         {!isVideo && !localVideoTrack && (
-                            <span className="absolute -bottom-5 text-[10px] text-purple-300">Convert to Video</span>
+                            <span className="absolute -bottom-5 text-[10px] text-primary-300">Convert to Video</span>
                         )}
                     </button>
                 </div>

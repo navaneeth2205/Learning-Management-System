@@ -4,9 +4,11 @@ Frontend client for the Learning Management System (LMS), built with React + Vit
 
 ## Current Status
 
-- Base role-based routing is implemented for learner, instructor, and admin flows.
-- Redux store and feature slices are wired.
-- UI is currently using mock/demo data in selected pages until backend API integration is completed.
+- Role-based routing fully implemented for learner, instructor, and admin flows
+- Redux store and feature slices fully integrated with backend APIs
+- All data is fetched from the backend database in real-time
+- Video/Audio calling integrated with Agora RTC platform
+- Full messaging and communication features enabled
 
 ## Run Locally
 
@@ -22,7 +24,7 @@ npm run dev
 - `npm run preview` - preview production build
 - `npm run lint` - run ESLint
 
-## Frontend Flow (High-Level)
+## Frontend Architecture
 
 - `src/main.jsx` bootstraps app
 - `src/App.jsx` provides Redux + Router wrappers
@@ -30,8 +32,9 @@ npm run dev
 - `src/layouts/*` contains role-specific shell layouts
 - `src/pages/*` contains page-level modules
 - `src/features/*` contains Redux slices/state
-- `src/components/*` contains shared and quiz UI components
+- `src/components/*` contains shared and reusable UI components
+- `src/services/*` contains API service modules for backend communication
 
-## Notes for Next Step
+## Deployment Notes
 
-Backend integration can now start by replacing mock data usage in pages/features with API calls (Axios), beginning from auth and course/quiz modules.
+This frontend is production-ready. All data is sourced from the backend API. Ensure backend services are properly configured before deploying.

@@ -1,8 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
-import { HiPhone, HiPhoneMissedCall, HiVideoCamera, HiX } from 'react-icons/hi';
+import { HiPhone, HiPhoneMissedCall, HiVideoCamera } from 'react-icons/hi';
 import { useSocket } from '../../context/SocketContext';
 import CallModal from './CallModal';
-import clsx from 'clsx';
 
 // Ring sound (using Web Audio API — no external files needed)
 function useRingSound() {
@@ -108,7 +107,7 @@ export default function CallManager() {
             socket.off('call:ended', handleEnded);
             socket.off('call:unavailable', handleUnavailable);
         };
-    }, [socket]);
+    }, [socket, startRing, stopRing]);
 
     const handleAcceptCall = () => {
         if (!incomingCall || !socket || acceptingRef.current) return;
@@ -157,14 +156,14 @@ export default function CallManager() {
             {/* ── Incoming Call Overlay ── */}
             {incomingCall && (
                 <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-[32px] shadow-2xl p-8 max-w-sm w-full mx-4 text-center space-y-6 animate-in zoom-in-95 fade-in duration-300">
+                    <div className="bg-gradient-to-br from-white to-slate-50 rounded-[32px] shadow-2xl p-8 max-w-sm w-full mx-4 text-center space-y-6 animate-in zoom-in-95 fade-in duration-300 border border-slate-100">
                         {/* Pulsing Avatar */}
                         <div className="relative inline-flex">
-                            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-3xl font-black shadow-xl">
+                            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white text-3xl font-black shadow-xl">
                                 {incomingCall.callerName?.[0]?.toUpperCase() || '?'}
                             </div>
-                            <div className="absolute inset-0 rounded-full border-4 border-indigo-400 animate-ping opacity-30" />
-                            <div className="absolute inset-0 rounded-full border-2 border-indigo-300 animate-pulse" />
+                            <div className="absolute inset-0 rounded-full border-4 border-primary-400 animate-ping opacity-30" />
+                            <div className="absolute inset-0 rounded-full border-2 border-primary-300 animate-pulse" />
                         </div>
 
                         {/* Caller Info */}
@@ -184,9 +183,9 @@ export default function CallManager() {
                             {[0, 1, 2, 3, 4].map(i => (
                                 <div
                                     key={i}
-                                    className="w-1 bg-indigo-500 rounded-full animate-pulse"
+                                    className="w-1 bg-gradient-to-b from-primary-500 to-primary-600 rounded-full animate-pulse"
                                     style={{
-                                        height: `${12 + Math.random() * 16}px`,
+                                        height: `${12 + ((i * 2.718) % 16)}px`,
                                         animationDelay: `${i * 0.15}s`,
                                     }}
                                 />
@@ -199,14 +198,14 @@ export default function CallManager() {
                             {/* Reject */}
                             <button
                                 onClick={handleRejectCall}
-                                className="w-16 h-16 rounded-full bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center shadow-lg shadow-rose-200 hover:scale-110 active:scale-95 transition-all"
+                                className="w-16 h-16 rounded-full bg-gradient-to-br from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white flex items-center justify-center shadow-lg shadow-rose-200 hover:scale-110 active:scale-95 transition-all"
                             >
                                 <HiPhoneMissedCall className="w-7 h-7 rotate-[135deg]" />
                             </button>
                             {/* Accept */}
                             <button
                                 onClick={handleAcceptCall}
-                                className="w-16 h-16 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-200 hover:scale-110 active:scale-95 transition-all"
+                                className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white flex items-center justify-center shadow-lg shadow-emerald-200 hover:scale-110 active:scale-95 transition-all"
                             >
                                 <HiPhone className="w-7 h-7" />
                             </button>
