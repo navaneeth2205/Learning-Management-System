@@ -230,6 +230,16 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
         });
     }, [remoteUsers]);
 
+    useEffect(() => {
+        if (isOpen) {
+            setIsMinimized(false);
+            setIsConnecting(false);
+            setConnectionError(null);
+            setIsMuted(false);
+            setIsVideoOff(false);
+        }
+    }, [isOpen]);
+
     const handleEndCall = async () => {
         const client = clientRef.current;
         const durationSeconds = callStartTimeRef.current
@@ -356,6 +366,10 @@ export default function CallModal({ channelName, isOpen, onClose, isVideo = true
             setIsConnecting(false);
         }
     };
+
+    if (!isOpen) {
+        return null;
+    }
 
     return (
         <div ref={containerRef} className={clsx(
