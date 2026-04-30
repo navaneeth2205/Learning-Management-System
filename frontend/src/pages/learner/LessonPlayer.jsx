@@ -5,7 +5,7 @@ import {
     HiChevronLeft, HiChevronRight, HiCheckCircle,
     HiPlay, HiDocumentText, HiBookmark, HiChatAlt,
     HiMenu, HiX, HiAcademicCap, HiClock, HiPause,
-    HiClipboardList, HiDownload, HiExternalLink, HiLockClosed, HiArrowsExpand
+    HiClipboardList, HiDownload, HiExternalLink, HiLockClosed, HiArrowsExpand, HiStar
 } from 'react-icons/hi';
 import { ROUTES } from '../../constants/routes';
 import Button from '../../components/ui/Button';
@@ -37,6 +37,7 @@ import {
     fetchQuizByLesson,
     submitQuizAnswers,
     fetchQuizzesByCourse,
+    issueCertificate,
 } from '../../services/learnerApi';
 import toast from 'react-hot-toast';
 import ReactPlayer from 'react-player';
@@ -470,6 +471,15 @@ export default function LessonPlayer() {
         return previousCompleted && areLessonQuizzesPassed(previousLesson.order);
     };
     const currentLessonQuizzesPassed = currentLesson ? areLessonQuizzesPassed(currentLesson.order) : true;
+    const completionReadyLessonIds = new Set(completedLessons);
+    if (isCurrentLessonCompleted && currentLessonId) {
+        completionReadyLessonIds.add(currentLessonId);
+    }
+    const hasCompletedEntireCourse = allLessons.length > 0 && allLessons.every((lesson) => {
+        const lessonId = String(lesson._id || lesson.id || '');
+        return completionReadyLessonIds.has(lessonId) && areLessonQuizzesPassed(lesson.order);
+    });
+    const canClaimCertificate = hasCompletedEntireCourse;
 
     // Video event handlers for ReactPlayer
     const handleProgress = (state) => {
@@ -537,6 +547,27 @@ export default function LessonPlayer() {
             toast.success('ðŸŽ‰ Congratulations! You finished the course!');
             navigate(`/learner/courses/${courseId}`);
         }
+    };
+
+    const handleClaimCertificate = async () => {
+        if (!canClaimCertificate) {
+            toast.error('Finish every lesson and pass all required quizzes to unlock your certificate.');
+            return;
+        }
+
+        try {
+            await issueCertificate(courseId);
+            toast.success('Certificate is ready for you.');
+            navigate(ROUTES.LEARNER_CERTIFICATES);
+        } catch (err) {
+            toast.error(err?.message || 'Failed to unlock certificate');
+        }
+    };
+
+    const handleReviewCourse = () => {
+        navigate(`/learner/courses/${courseId}`, {
+            state: { openRatingModal: true },
+        });
     };
 
     // Build the full content URL
@@ -1392,6 +1423,40 @@ export default function LessonPlayer() {
                                         )}
                                     </div>
                                 )}
+
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
+                                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                                    <div className="space-y-1">
+                                        <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Course Actions</p>
+                                        <h3 className="text-lg font-black text-slate-900">Keep your momentum after this lesson</h3>
+                                        <p className="text-sm text-slate-600">
+                                            Claim your certificate as soon as the full course is complete, or leave a review for the instructor.
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-col gap-3 sm:flex-row">
+                                        <Button
+                                            className={clsx(
+                                                'border-none',
+                                                canClaimCertificate
+                                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                                    : 'bg-slate-200 text-slate-500 hover:bg-slate-200'
+                                            )}
+                                            onClick={handleClaimCertificate}
+                                        >
+                                            <HiAcademicCap className="w-4 h-4 mr-2" />
+                                            {canClaimCertificate ? 'Get Certificate' : 'Certificate Locked'}
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                                            onClick={handleReviewCourse}
+                                        >
+                                            <HiStar className="w-4 h-4 mr-2" />
+                                            Review Course
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

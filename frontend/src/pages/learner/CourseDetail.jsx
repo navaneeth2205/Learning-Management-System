@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import {
     HiStar, HiClock, HiAcademicCap, HiChevronRight,
     HiCheckCircle, HiLockClosed, HiPlay, HiDocumentText,
@@ -19,6 +19,7 @@ import { formatDuration } from '../../utils/formatDuration';
 
 export default function CourseDetail() {
     const { courseId } = useParams();
+    const location = useLocation();
     const { token } = useSelector(s => s.auth);
     const [activeTab, setActiveTab] = useState('curriculum');
     const [course, setCourse] = useState(null);
@@ -251,6 +252,12 @@ export default function CourseDetail() {
         return !lessonCompleted || !areLessonQuizzesPassed(lesson.order);
     });
     const isCourseCompleted = enrolled && currentProgress >= 100;
+
+    useEffect(() => {
+        if (location.state?.openRatingModal && isCourseCompleted) {
+            setShowRatingModal(true);
+        }
+    }, [isCourseCompleted, location.state]);
 
     const tabs = [
         { key: 'curriculum', label: 'Curriculum', icon: <HiAcademicCap /> },
