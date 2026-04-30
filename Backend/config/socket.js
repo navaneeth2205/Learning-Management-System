@@ -32,14 +32,25 @@ export const emitToUsers = (userIds = [], eventName, payload = {}) => {
 };
 
 export const initSocketServer = (httpServer) => {
+	const defaultDevOrigins = ['http://127.0.0.1:5173', 'http://127.0.0.1:5174', 'http://localhost:5173', 'http://localhost:5174'];
+	const configuredOrigins = env.clientUrl === '*'
+		? []
+		: env.clientUrl
+				.split(',')
+				.map((origin) => origin.trim())
+				.filter(Boolean);
+	const allowedOrigins = new Set([...defaultDevOrigins, ...configuredOrigins]);
+
 	const io = new Server(httpServer, {
 		cors: {
-			origin: [
-				'http://127.0.0.1:5173',
-				'http://127.0.0.1:5174',
-				'http://localhost:5173',
-				'http://localhost:5174',
-			],
+			origin(origin, callback) {
+				if (!origin || allowedOrigins.has(origin)) {
+					callback(null, true);
+					return;
+				}
+
+				callback(new Error(`Socket CORS blocked for origin: ${origin}`));
+			},
 			credentials: true,
 		},
 	});
