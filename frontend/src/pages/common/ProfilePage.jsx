@@ -371,8 +371,8 @@ export default function ProfilePage() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 p-6 md:p-8" style={sora}>
-            <div className="max-w-4xl mx-auto space-y-6">
+        <div className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-8" style={sora}>
+            <div className="max-w-5xl mx-auto space-y-6">
                 <div className="space-y-1">
                     <h1 className="text-3xl font-black text-slate-900 tracking-tighter">Account Settings</h1>
                     <p className="text-sm text-slate-400 font-medium">Manage your profile, security, and learning preferences.</p>
@@ -381,8 +381,8 @@ export default function ProfilePage() {
                     </p>
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-8">
-                    <aside className="w-full md:w-64 flex-shrink-0">
+                <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] gap-6 lg:gap-8 items-start">
+                    <aside className="w-full lg:w-72 flex-shrink-0">
                         <div className="bg-white rounded-[24px] border border-slate-100 shadow-xl shadow-slate-200/40 overflow-hidden">
                             <div className="p-6 border-b border-slate-50 text-center space-y-4">
                                 <div className="relative inline-block">
@@ -434,12 +434,15 @@ export default function ProfilePage() {
                         </div>
                     </aside>
 
-                    <main className="flex-1 min-w-0">
+                    <main className="min-w-0 w-full">
                         <div className="bg-white rounded-[24px] border border-slate-100 shadow-2xl shadow-indigo-100/20 p-6 md:p-8">
                             {activeTab === 'profile' && (
                                 <div className="space-y-6">
-                                    <div className="flex items-center justify-between border-b border-slate-50 pb-4">
-                                        <h2 className="text-xl font-black text-slate-900 tracking-tight">Public Profile</h2>
+                                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-slate-50 pb-4">
+                                        <div>
+                                            <h2 className="text-xl font-black text-slate-900 tracking-tight">Public Profile</h2>
+                                            <p className="text-sm text-slate-500">Keep your learner details organized and easy to review.</p>
+                                        </div>
                                         {!isEditing ? (
                                             <Button onClick={handleEdit} variant="outline" size="sm" className="rounded-lg" icon={<HiPencilAlt />}>
                                                 Edit
@@ -451,8 +454,8 @@ export default function ProfilePage() {
                                         )}
                                     </div>
 
-                                    <div className="grid grid-cols-1 gap-6">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                                    <div className="space-y-6">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4 items-stretch">
                                             {summaryCards.map((card) => (
                                                 <LiveStatCard
                                                     key={card.id}
@@ -463,54 +466,71 @@ export default function ProfilePage() {
                                                 />
                                             ))}
                                             {!summaryCards.length && isLoadingInsights && (
-                                                <div className="sm:col-span-2 xl:col-span-4 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-5 text-sm font-medium text-slate-500">
+                                                <div className="sm:col-span-2 2xl:col-span-4 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-5 text-sm font-medium text-slate-500">
                                                     Loading live profile insights...
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <EditableGroup
-                                                label="Full Name"
-                                                value={profileData.name}
-                                                isEditing={isEditing}
-                                                onChange={(value) => setProfileData((current) => ({ ...current, name: value }))}
-                                            />
-                                            <EditableGroup
-                                                label="Email Address"
-                                                value={profileData.email}
-                                                isEditing={isEditing}
-                                                onChange={(value) => setProfileData((current) => ({ ...current, email: value }))}
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <EditableGroup
-                                                label={activeRole === 'instructor' ? 'Teaching Focus' : 'Learning Focus'}
-                                                value={profileData.focus}
-                                                isEditing={isEditing}
-                                                onChange={(value) => setProfileData((current) => ({ ...current, focus: value }))}
-                                            />
-                                            <EditableGroup
-                                                label="Timezone"
-                                                value={profileData.timezone}
-                                                isEditing={isEditing}
-                                                onChange={(value) => setProfileData((current) => ({ ...current, timezone: value }))}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Bio</label>
-                                        {isEditing ? (
-                                            <textarea
-                                                className="w-full bg-indigo-50/10 border border-indigo-100 rounded-xl p-4 text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:bg-white focus:outline-none transition-all min-h-[100px]"
-                                                value={profileData.bio}
-                                                onChange={(event) => setProfileData((current) => ({ ...current, bio: event.target.value }))}
-                                            />
-                                        ) : (
-                                            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm font-medium text-slate-500">
-                                                {profileData.bio || 'No bio added yet.'}
+                                        <section className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 md:p-6 space-y-4">
+                                            <div>
+                                                <h3 className="text-sm font-black text-slate-900 tracking-tight">Basic Details</h3>
+                                                <p className="mt-1 text-xs font-medium text-slate-500">These details appear across your account and course spaces.</p>
                                             </div>
-                                        )}
+                                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                                <EditableGroup
+                                                    label="Full Name"
+                                                    value={profileData.name}
+                                                    isEditing={isEditing}
+                                                    onChange={(value) => setProfileData((current) => ({ ...current, name: value }))}
+                                                />
+                                                <EditableGroup
+                                                    label="Email Address"
+                                                    value={profileData.email}
+                                                    isEditing={isEditing}
+                                                    onChange={(value) => setProfileData((current) => ({ ...current, email: value }))}
+                                                />
+                                            </div>
+                                        </section>
+                                        <section className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 md:p-6 space-y-4">
+                                            <div>
+                                                <h3 className="text-sm font-black text-slate-900 tracking-tight">Preferences</h3>
+                                                <p className="mt-1 text-xs font-medium text-slate-500">Keep your focus and timezone aligned with your study routine.</p>
+                                            </div>
+                                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                                <EditableGroup
+                                                    label={activeRole === 'instructor' ? 'Teaching Focus' : 'Learning Focus'}
+                                                    value={profileData.focus}
+                                                    isEditing={isEditing}
+                                                    onChange={(value) => setProfileData((current) => ({ ...current, focus: value }))}
+                                                />
+                                                <EditableGroup
+                                                    label="Timezone"
+                                                    value={profileData.timezone}
+                                                    isEditing={isEditing}
+                                                    onChange={(value) => setProfileData((current) => ({ ...current, timezone: value }))}
+                                                />
+                                            </div>
+                                        </section>
+                                        <section className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 md:p-6 space-y-4">
+                                            <div>
+                                                <h3 className="text-sm font-black text-slate-900 tracking-tight">Bio</h3>
+                                                <p className="mt-1 text-xs font-medium text-slate-500">A short introduction helps personalize your profile.</p>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">About You</label>
+                                                {isEditing ? (
+                                                    <textarea
+                                                        className="w-full bg-white border border-indigo-100 rounded-xl p-4 text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:outline-none transition-all min-h-[120px]"
+                                                        value={profileData.bio}
+                                                        onChange={(event) => setProfileData((current) => ({ ...current, bio: event.target.value }))}
+                                                    />
+                                                ) : (
+                                                    <div className="bg-white border border-slate-100 rounded-xl p-4 text-sm font-medium text-slate-500 min-h-[120px]">
+                                                        {profileData.bio || 'No bio added yet.'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </section>
                                     </div>
 
                                     {isEditing && (
@@ -532,8 +552,11 @@ export default function ProfilePage() {
 
                             {activeTab === 'security' && (
                                 <div className="space-y-8">
-                                    <h2 className="text-xl font-black text-slate-900 tracking-tight border-b border-slate-50 pb-4">Security</h2>
-                                    <div className="space-y-3">
+                                    <div className="border-b border-slate-50 pb-4">
+                                        <h2 className="text-xl font-black text-slate-900 tracking-tight">Security</h2>
+                                        <p className="mt-1 text-sm text-slate-500">Manage password access and keep your account protected.</p>
+                                    </div>
+                                    <div className="space-y-3 max-w-3xl">
                                         <SecurityAction
                                             icon={<HiKey />}
                                             title={activeRole === 'admin' ? 'Admin Password Change' : 'Verified Reset Flow'}
@@ -543,20 +566,22 @@ export default function ProfilePage() {
                                             active={true}
                                         />
                                     </div>
-                                    <div className="space-y-4 pt-4">
+                                    <div className="space-y-4 pt-2 max-w-3xl">
                                         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                             {activeRole === 'admin' ? 'Update Password' : 'Reset Password With OTP'}
                                         </h3>
-                                        <div className="space-y-4">
-                                            <Input
-                                                label="Current Password"
-                                                type="password"
-                                                className="rounded-xl"
-                                                value={passwords.current}
-                                                onChange={(event) => setPasswords((currentState) => ({ ...currentState, current: event.target.value }))}
-                                                disabled={activeRole !== 'admin'}
-                                                hint={activeRole !== 'admin' ? 'Learner and instructor password reset uses an email OTP.' : undefined}
-                                            />
+                                        <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-5 md:p-6">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                                                <Input
+                                                    label="Current Password"
+                                                    type="password"
+                                                    className="rounded-xl"
+                                                    value={passwords.current}
+                                                    onChange={(event) => setPasswords((currentState) => ({ ...currentState, current: event.target.value }))}
+                                                    disabled={activeRole !== 'admin'}
+                                                    hint={activeRole !== 'admin' ? 'Learner and instructor password reset uses an email OTP.' : undefined}
+                                                />
+                                            </div>
                                             {activeRole === 'admin' ? (
                                                 <>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -595,7 +620,7 @@ export default function ProfilePage() {
                                                     >
                                                         {passwordOtpSent ? 'Resend OTP' : 'Send OTP'}
                                                     </Button>
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                                                         <Input
                                                             label="OTP Code"
                                                             type="text"
@@ -614,7 +639,7 @@ export default function ProfilePage() {
                                                         <Input
                                                             label="Verify Password"
                                                             type="password"
-                                                            className="rounded-xl"
+                                                            className="rounded-xl md:col-span-2"
                                                             value={passwordResetForm.confirmPassword}
                                                             onChange={(event) => setPasswordResetForm((currentState) => ({ ...currentState, confirmPassword: event.target.value }))}
                                                         />
@@ -636,7 +661,7 @@ export default function ProfilePage() {
 
                             {activeTab === 'notifications' && (
                                 <div className="space-y-8">
-                                    <div className="flex items-center justify-between gap-4 border-b border-slate-50 pb-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-slate-50 pb-4">
                                         <div>
                                             <h2 className="text-xl font-black text-slate-900 tracking-tight">Notifications</h2>
                                             <p className="text-sm text-slate-500">
@@ -654,7 +679,7 @@ export default function ProfilePage() {
                                         </Button>
                                     </div>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4 items-stretch">
                                         <LiveStatCard
                                             icon={<HiBell className="w-5 h-5" />}
                                             title="Total Notifications"
@@ -726,20 +751,20 @@ function EditableGroup({ label, value, isEditing, onChange }) {
 
 function SecurityAction({ icon, title, desc, active, btnText }) {
     return (
-        <div className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:bg-white hover:shadow-sm transition-all">
-            <div className="flex gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:bg-white hover:shadow-sm transition-all">
+            <div className="flex gap-4 min-w-0">
                 <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-500 shadow-sm transition-all group-hover:bg-indigo-600 group-hover:text-white">
                     {icon}
                 </div>
-                <div>
+                <div className="min-w-0">
                     <h4 className="text-sm font-black text-slate-900 tracking-tight">{title}</h4>
                     <p className="text-[11px] text-slate-400 font-medium">{desc}</p>
                 </div>
             </div>
             {active ? (
-                <Badge color="green" variant="glass" className="font-black text-[7px] uppercase tracking-widest">ACTIVE</Badge>
+                <Badge color="green" variant="glass" className="self-start sm:self-auto font-black text-[7px] uppercase tracking-widest">ACTIVE</Badge>
             ) : (
-                btnText && <div className="text-[9px] font-black text-indigo-600 uppercase transition-all">{btnText}</div>
+                btnText && <div className="self-start sm:self-auto text-[9px] font-black text-indigo-600 uppercase transition-all">{btnText}</div>
             )}
         </div>
     );
@@ -747,7 +772,7 @@ function SecurityAction({ icon, title, desc, active, btnText }) {
 
 function LiveStatCard({ icon, title, value, note }) {
     return (
-        <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+        <div className="h-full rounded-2xl border border-slate-100 bg-slate-50/80 p-4 flex flex-col">
             <div className="flex items-center justify-between gap-3">
                 <div className="w-11 h-11 rounded-2xl bg-white text-indigo-600 shadow-sm flex items-center justify-center">
                     {icon}
@@ -776,7 +801,7 @@ function NotificationTimelineRow({ notification, onMarkRead }) {
             'rounded-2xl border px-5 py-4 transition-all',
             notification.unread ? 'border-indigo-200 bg-indigo-50/60' : 'border-slate-100 bg-white'
         )}>
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 space-y-2">
                     <div className="flex items-center gap-3 flex-wrap">
                         <h4 className="text-sm font-black text-slate-900 tracking-tight">{notification.title}</h4>
@@ -795,7 +820,7 @@ function NotificationTimelineRow({ notification, onMarkRead }) {
                     </p>
                 </div>
                 {!notification.read && (
-                    <Button size="sm" variant="outline" className="rounded-xl" onClick={() => onMarkRead(notification.id)}>
+                    <Button size="sm" variant="outline" className="rounded-xl self-start" onClick={() => onMarkRead(notification.id)}>
                         Mark Read
                     </Button>
                 )}

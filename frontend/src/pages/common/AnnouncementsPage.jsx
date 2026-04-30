@@ -132,6 +132,9 @@ export default function AnnouncementsPage() {
                                         {featuredAnnouncement.timeLabel}
                                     </span>
                                 </div>
+                                <p className="text-sm font-bold text-slate-500">
+                                    Posted by {featuredAnnouncement.author}
+                                </p>
                                 <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight group-hover:text-indigo-600 transition-colors">
                                     {featuredAnnouncement.title}
                                 </h2>
@@ -214,6 +217,9 @@ export default function AnnouncementsPage() {
                                     </h2>
                                     <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest" style={mono}>
                                         Published {selectedDetail.date}
+                                    </p>
+                                    <p className="text-sm font-bold text-slate-500">
+                                        Posted by {selectedDetail.author}
                                     </p>
                                 </div>
 
@@ -394,6 +400,9 @@ function AnnouncementCard({ data, onClick }) {
                 <h3 className="text-lg font-black text-slate-900 tracking-tight leading-tight group-hover:text-indigo-600 transition-colors">
                     {data.title}
                 </h3>
+                <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+                    Posted by {data.author}
+                </p>
                 <p className="text-sm text-slate-400 font-medium leading-relaxed line-clamp-3">
                     {data.content}
                 </p>

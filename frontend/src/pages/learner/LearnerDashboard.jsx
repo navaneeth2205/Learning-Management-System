@@ -48,6 +48,7 @@ export default function LearnerDashboard() {
     const completedCount = stats?.completedCourses ?? 0;
     const certCount = stats?.certificates ?? 0;
     const avgScore = stats?.avgScore ?? 0;
+    const totalLearningHours = stats?.totalLearningHours ?? 0;
 
     // Active course from enrollments only
     const activeCourse = useMemo(() => {
@@ -85,29 +86,30 @@ export default function LearnerDashboard() {
         return [];
     }, [liveCourses, stats]);
 
-    const chartData = [
-        { day: 'W1', hours: 45 },
-        { day: 'W2', hours: 80 },
-        { day: 'W3', hours: 60 },
-    ];
+    const chartData = useMemo(() => {
+        if (Array.isArray(stats?.learningHoursChart) && stats.learningHoursChart.length > 0) {
+            return stats.learningHoursChart.map((item, index) => ({
+                day: item.label || `C${index + 1}`,
+                hours: Number(item.hours || 0),
+                fullTitle: item.fullTitle || item.label || `Course ${index + 1}`,
+            }));
+        }
 
-    // Leaderboard data (live or fallback)
+        return [{ day: 'No data', hours: 0, fullTitle: 'No completed lesson durations yet' }];
+    }, [stats]);
+
+    // Leaderboard data (live only)
     const leaderboard = useMemo(() => {
         if (leaderboardData.length > 0) {
             return leaderboardData.slice(0, 5).map((item, i) => ({
                 name: item.user?.name || 'Unknown',
                 points: item.totalScore?.toLocaleString() || '0',
-                days: `${item.coursesCompleted || 0} completed`,
+                days: `${item.coursesCompleted || 0} courses completed`,
+                meta: `${item.totalQuizzes || 0} quizzes · ${item.certificates || 0} certificates`,
                 color: ['orange', 'blue', 'purple', 'green', 'red'][i] || 'gray',
             }));
         }
-        return [
-            { name: 'AlexR_21', points: '1,532', days: '15 days', color: 'orange' },
-            { name: 'LearnWithMira', points: '1,340', days: '12 days', color: 'blue' },
-            { name: 'CodeJunkie', points: '1,120', days: '10 days', color: 'purple' },
-            { name: 'DesignGuru', points: '980', days: '8 days', color: 'green' },
-            { name: 'MathMaster', points: '850', days: '7 days', color: 'red' },
-        ];
+        return [];
     }, [leaderboardData]);
 
     const courseId = activeCourse?._id || activeCourse?.id || null;
@@ -346,7 +348,10 @@ export default function LearnerDashboard() {
                 <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md space-y-8">
                     <div className="flex items-center justify-between">
                         <h4 className="font-black text-gray-800">Learning Hours</h4>
-                        <HiClock className="w-5 h-5 text-gray-300" />
+                        <div className="flex items-center gap-2 text-sm font-black text-primary-500">
+                            <HiClock className="w-5 h-5 text-gray-300" />
+                            <span>{totalLearningHours}h</span>
+                        </div>
                     </div>
                     <div className="h-48 w-full flex justify-center">
                         <ResponsiveContainer width="100%" height="100%">
@@ -365,6 +370,8 @@ export default function LearnerDashboard() {
                                 <Tooltip
                                     cursor={{ fill: '#f8fafc' }}
                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                                    formatter={(value) => [`${value}h`, 'Learning time']}
+                                    labelFormatter={(label, payload) => payload?.[0]?.payload?.fullTitle || label}
                                 />
                                 <Bar dataKey="hours" radius={[4, 4, 0, 0]} barSize={24}>
                                     {chartData.map((entry, index) => (
@@ -383,34 +390,41 @@ export default function LearnerDashboard() {
                         <Link to={ROUTES.LEARNER_LEADERBOARD} className="text-sm font-bold text-primary-500 hover:underline">See All</Link>
                     </div>
 
-                    <div className="space-y-5">
-                        {leaderboard.map((item, i) => (
-                            <div key={i} className="flex items-center justify-between group cursor-pointer">
-                                <div className="flex items-center gap-3">
-                                    <div className="relative">
-                                        <Avatar name={item.name} size="sm" />
-                                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-white rounded-full flex items-center justify-center text-[8px] font-black shadow-sm ring-1 ring-slate-100">
-                                            {i + 1}
+                    {leaderboard.length > 0 ? (
+                        <div className="space-y-5">
+                            {leaderboard.map((item, i) => (
+                                <div key={i} className="flex items-center justify-between group cursor-pointer">
+                                    <div className="flex items-center gap-3">
+                                        <div className="relative">
+                                            <Avatar name={item.name} size="sm" />
+                                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-white rounded-full flex items-center justify-center text-[8px] font-black shadow-sm ring-1 ring-slate-100">
+                                                {i + 1}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-0.5">
+                                            <p className="text-xs font-black text-gray-800 group-hover:text-[#2563eb] transition-colors">{item.name}</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <HiFire className={clsx("w-3 h-3",
+                                                    item.color === 'orange' ? 'text-orange-500' :
+                                                        item.color === 'blue' ? 'text-blue-500' : 'text-gray-300'
+                                                )} />
+                                                <span className="text-[10px] text-gray-600 font-bold">{item.days}</span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 font-bold">{item.meta}</p>
                                         </div>
                                     </div>
-                                    <div className="space-y-0.5">
-                                        <p className="text-xs font-black text-gray-800 group-hover:text-[#2563eb] transition-colors">{item.name}</p>
-                                        <div className="flex items-center gap-1.5">
-                                            <HiFire className={clsx("w-3 h-3",
-                                                item.color === 'orange' ? 'text-orange-500' :
-                                                    item.color === 'blue' ? 'text-blue-500' : 'text-gray-300'
-                                            )} />
-                                            <span className="text-[10px] text-gray-600 font-bold">{item.days}</span>
-                                        </div>
+                                    <div className="flex items-center gap-1 text-primary-500 font-black text-xs">
+                                        <HiStar className="w-3.5 h-3.5" />
+                                        <span>{item.points}</span>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-1 text-primary-500 font-black text-xs">
-                                    <HiStar className="w-3.5 h-3.5" />
-                                    <span>{item.points}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-sm font-medium text-slate-500">
+                            Leaderboard will appear once learners start completing courses, quizzes, or certificates.
+                        </div>
+                    )}
                 </div>
 
             </div>
