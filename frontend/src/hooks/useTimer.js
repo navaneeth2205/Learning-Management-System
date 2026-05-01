@@ -24,16 +24,12 @@ export function useTimer(quizId, initialSeconds, onExpire) {
                     sessionStorage.setItem(STORAGE_KEY, next);
                     if (next <= 0) {
                         clearInterval(interval);
-                        setIsRunning(false);
                         if (onExpireRef.current) onExpireRef.current();
                         return 0;
                     }
                     return next;
                 });
             }, 1000);
-        } else if (seconds <= 0 && isRunning) {
-            setIsRunning(false);
-            if (onExpireRef.current) onExpireRef.current();
         }
         return () => clearInterval(interval);
     }, [isRunning, seconds, STORAGE_KEY]);
