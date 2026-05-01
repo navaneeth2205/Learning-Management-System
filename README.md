@@ -8,17 +8,65 @@ A production-ready, enterprise-grade Learning Management System built with moder
 
 ## 📸 Screenshots
 
-| Learner Dashboard | Course Catalog | Quiz Interface |
-|---|---|---|
-| ![Learner Dashboard](./screenshots/learner-dashboard.png) | ![Course Catalog](./screenshots/course-catalog.png) | ![Quiz Interface](./screenshots/quiz-interface.png) |
+> Full product preview with role-based experiences, real-time collaboration, course authoring, grading workflows, and analytics.
 
-| Video Call | Messaging | Admin Dashboard |
-|---|---|---|
-| ![Video Call](./screenshots/video-call.png) | ![Messaging](./screenshots/messaging.png) | ![Admin Dashboard](./screenshots/admin-dashboard.png) |
+<p align="center">
+	<a href="./screenshots/learner-dashboard.png"><img src="./screenshots/learner-dashboard.png" alt="Learner Dashboard" width="30%" /></a>
+	<a href="./screenshots/course-catalog.png"><img src="./screenshots/course-catalog.png" alt="Course Catalog" width="30%" /></a>
+	<a href="./screenshots/quiz-interface.png"><img src="./screenshots/quiz-interface.png" alt="Quiz Interface" width="30%" /></a>
+</p>
 
-| Course Builder | Grading Workspace | Analytics |
-|---|---|---|
-| ![Course Builder](./screenshots/course-builder.png) | ![Grading](./screenshots/grading.png) | ![Analytics](./screenshots/analytics.png) |
+<p align="center">
+	<a href="./screenshots/video-call.png"><img src="./screenshots/video-call.png" alt="Video Call" width="30%" /></a>
+	<a href="./screenshots/messaging.png"><img src="./screenshots/messaging.png" alt="Messaging" width="30%" /></a>
+	<a href="./screenshots/admin-dashboard.png"><img src="./screenshots/admin-dashboard.png" alt="Admin Dashboard" width="30%" /></a>
+</p>
+
+<p align="center">
+	<a href="./screenshots/course-builder.png"><img src="./screenshots/course-builder.png" alt="Course Builder" width="30%" /></a>
+	<a href="./screenshots/course-builder%20%282%29.png"><img src="./screenshots/course-builder%20%282%29.png" alt="Course Builder Variant 2" width="30%" /></a>
+	<a href="./screenshots/course-builder%20%283%29.png"><img src="./screenshots/course-builder%20%283%29.png" alt="Course Builder Variant 3" width="30%" /></a>
+</p>
+
+<p align="center">
+	<a href="./screenshots/grading.png"><img src="./screenshots/grading.png" alt="Grading Workspace" width="30%" /></a>
+	<a href="./screenshots/analytics.png"><img src="./screenshots/analytics.png" alt="Analytics" width="30%" /></a>
+</p>
+
+<details>
+	<summary><b>✨ Click for Focus View: Learner + Engagement</b></summary>
+
+	<br />
+
+	<p align="center">
+		<img src="./screenshots/learner-dashboard.png" alt="Learner Dashboard Large" width="85%" />
+	</p>
+	<p align="center">
+		<img src="./screenshots/quiz-interface.png" alt="Quiz Interface Large" width="85%" />
+	</p>
+	<p align="center">
+		<img src="./screenshots/video-call.png" alt="Video Call Large" width="85%" />
+	</p>
+</details>
+
+<details>
+	<summary><b>⚡ Click for Focus View: Admin + Instructor Workflows</b></summary>
+
+	<br />
+
+	<p align="center">
+		<img src="./screenshots/admin-dashboard.png" alt="Admin Dashboard Large" width="85%" />
+	</p>
+	<p align="center">
+		<img src="./screenshots/course-builder%20%282%29.png" alt="Course Builder Variant 2 Large" width="85%" />
+	</p>
+	<p align="center">
+		<img src="./screenshots/grading.png" alt="Grading Large" width="85%" />
+	</p>
+	<p align="center">
+		<img src="./screenshots/analytics.png" alt="Analytics Large" width="85%" />
+	</p>
+</details>
 
 ---
 
