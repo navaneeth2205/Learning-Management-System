@@ -41,7 +41,7 @@ const formatAnnouncement = (announcement) => ({
         })
         : '',
     priority: announcement.pinned ? 'high' : 'normal',
-    author: announcement.authorId?.name || 'Authorized Member',
+    author: announcement.authorName || announcement.authorId?.name || announcement.author?.name || 'Authorized Member',
     timeLabel: announcement.createdAt
         ? new Date(announcement.createdAt).toLocaleTimeString('en-US', {
             hour: 'numeric',

@@ -4,7 +4,9 @@ import Enrollment from '../enrollment/enrollment.model.js';
 import { createAppError } from '../../utils/constants.js';
 
 export const createAnnouncement = async ({ title, content, authorId, courseId, audience, pinned }) =>
-	Announcement.create({ title, content, authorId, courseId, audience, pinned });
+	Announcement.create({ title, content, authorId, courseId, audience, pinned })
+		.then((announcement) => announcement.populate('authorId', 'name email role'))
+		.then((announcement) => announcement.populate('courseId', 'title'));
 
 export const getAnnouncements = async (userId, userRole) => {
 	const filter = {

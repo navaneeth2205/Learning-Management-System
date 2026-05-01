@@ -237,7 +237,7 @@ export const getLeaderboard = async () => {
 				Math.round(entry.avgCompletion || 0) +
 				Math.round(quizSecondsToMinutes(entry.totalQuizSeconds || 0)),
 		}))
-		sort((a, b) => {
+		.sort((a, b) => {
 			if (b.compositeScore !== a.compositeScore) return b.compositeScore - a.compositeScore;
 			if (b.coursesCompleted !== a.coursesCompleted) return b.coursesCompleted - a.coursesCompleted;
 			return b.avgPercentage - a.avgPercentage;
