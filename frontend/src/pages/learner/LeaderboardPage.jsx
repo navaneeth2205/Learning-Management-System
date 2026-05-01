@@ -5,6 +5,9 @@ import clsx from 'clsx';
 import Badge from '../../components/ui/Badge';
 import { fetchLeaderboard } from '../../services/learnerApi';
 
+const getLeaderboardName = (item) =>
+    item?.userName?.trim() || item?.user?.name?.trim() || item?.name?.trim() || 'Unknown';
+
 export default function LeaderboardPage() {
     const [period, setPeriod] = useState('This Week');
     const [showAll, setShowAll] = useState(false);
@@ -18,7 +21,7 @@ export default function LeaderboardPage() {
                 if (data && data.length > 0) {
                     const mapped = data.map((item, i) => ({
                         id: i + 1,
-                        name: item.user?.name || 'Unknown',
+                        name: getLeaderboardName(item),
                         points: item.totalScore || 0,
                         days: item.coursesCompleted || 0,
                         quizzes: item.totalQuizzes || 0,

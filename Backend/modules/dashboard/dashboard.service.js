@@ -243,17 +243,25 @@ export const getLeaderboard = async () => {
 			return b.avgPercentage - a.avgPercentage;
 		})
 		.slice(0, 50)
-		.map((entry, index) => ({
-			rank: index + 1,
-			user: userMap.get(entry.userId) || { name: 'Unknown', email: '' },
-			totalScore: entry.compositeScore,
-			totalQuizzes: entry.totalQuizzes,
-			totalQuizMinutes: Number(quizSecondsToMinutes(entry.totalQuizSeconds || 0).toFixed(1)),
-			avgPercentage: entry.avgPercentage,
-			coursesEnrolled: entry.coursesEnrolled,
-			coursesCompleted: entry.coursesCompleted,
-			certificates: entry.certificates,
-		}));
+		.map((entry, index) => {
+			const user = userMap.get(entry.userId);
+
+			return {
+				rank: index + 1,
+				userId: entry.userId,
+				userName: user?.name || 'Unknown',
+				userEmail: user?.email || '',
+				userRole: user?.role || '',
+				user: user || { name: 'Unknown', email: '', role: '' },
+				totalScore: entry.compositeScore,
+				totalQuizzes: entry.totalQuizzes,
+				totalQuizMinutes: Number(quizSecondsToMinutes(entry.totalQuizSeconds || 0).toFixed(1)),
+				avgPercentage: entry.avgPercentage,
+				coursesEnrolled: entry.coursesEnrolled,
+				coursesCompleted: entry.coursesCompleted,
+				certificates: entry.certificates,
+			};
+		});
 };
 
 export const getGradesForLearner = async (userId) => {

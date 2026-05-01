@@ -16,6 +16,9 @@ import Avatar from '../../components/ui/Avatar';
 import clsx from 'clsx';
 import { fetchLearnerDashboard, fetchLeaderboard, fetchCourses } from '../../services/learnerApi';
 
+const getLeaderboardName = (item) =>
+    item?.userName?.trim() || item?.user?.name?.trim() || item?.name?.trim() || 'Unknown';
+
 export default function LearnerDashboard() {
     const { user } = useSelector(s => s.auth);
     const [stats, setStats] = useState(null);
@@ -102,7 +105,7 @@ export default function LearnerDashboard() {
     const leaderboard = useMemo(() => {
         if (leaderboardData.length > 0) {
             return leaderboardData.slice(0, 5).map((item, i) => ({
-                name: item.user?.name || 'Unknown',
+                name: getLeaderboardName(item),
                 points: item.totalScore?.toLocaleString() || '0',
                 days: `${item.coursesCompleted || 0} courses completed`,
                 meta: `${item.totalQuizzes || 0} quizzes · ${item.certificates || 0} certificates`,
