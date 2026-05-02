@@ -70,6 +70,32 @@ A production-ready, enterprise-grade Learning Management System built with moder
 
 ---
 
+## 🎬 Watch the LMS in Action
+
+<p align="center">
+	<a href="https://drive.google.com/file/d/1dtplo8Mx---_vZh7wiBvJChhB0nMa07v/view?usp=sharing">
+		<img src="https://img.shields.io/badge/Backend%20Walkthrough-1f7a8c?style=for-the-badge&logo=google-drive&logoColor=white" alt="Backend Video" />
+	</a>
+	<a href="https://drive.google.com/file/d/1REjWZUi-IeFoF1m1sptDNL6vGRxz4qjX/view?usp=drive_link">
+		<img src="https://img.shields.io/badge/Frontend%20Walkthrough-f97316?style=for-the-badge&logo=google-drive&logoColor=white" alt="Frontend Video" />
+	</a>
+	<a href="https://drive.google.com/file/d/1KEbLCVlGLlSUxprvV9CcXkbS5YcCHAMr/view?usp=drive_link">
+		<img src="https://img.shields.io/badge/Project%20Overview-0f766e?style=for-the-badge&logo=google-drive&logoColor=white" alt="Project Overview Video" />
+	</a>
+</p>
+
+<table align="center">
+	<tr>
+		<td align="center"><b>Backend Demo</b><br />Architecture, APIs, real-time flows, and server-side behavior.</td>
+		<td align="center"><b>Frontend Demo</b><br />UI journeys, interactions, responsive layouts, and user flows.</td>
+		<td align="center"><b>Project Overview</b><br />A guided tour of the full LMS experience end to end.</td>
+	</tr>
+</table>
+
+> Tip: open the overview first if you want the quickest tour, then dive into backend and frontend demos for the implementation details.
+
+---
+
 ## 🛠 Tech Stack
 
 ### Backend
